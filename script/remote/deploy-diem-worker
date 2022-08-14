@@ -6,7 +6,7 @@ test -d "${MINION_SIMD_DIR}/${MINION_SIMD_ID}"
 
 SERVER_PORT=7000
 CLIENT_PORT=9000
-ACCOUNTS=130
+ACCOUNTS=0
 
 script_name='deploy-diem-worker'
 install_root="${HOME}/install/diem"
@@ -384,6 +384,7 @@ install_diablo_files() {
     tmpbox="$(mktemp -d --suffix='.d' 'minion-diem.XXXXXX')"
 
     cp "${network_path}/accounts.yaml" "${tmpbox}/accounts.yaml"
+    cp "${network_path}/mint.key" "${tmpbox}/mint.key"
 
     (
 	for nodeoff in $(list_blockchain_nodes_with_offset) ; do

@@ -8,8 +8,8 @@ set -e
 golang_version='1.17.8'
 golang_url="https://go.dev/dl/go${golang_version}.linux-$(dpkg --print-architecture).tar.gz"
 
-diablo_url='https://github.com/lebdron/diablo-benchmark.git'
-diablo_checkout='v2-solana'
+diablo_url='https://github.com/NatoliChris/diablo-benchmark.git'
+diablo_checkout='aec'
 
 if ! command -v 'sudo' > '/dev/null' ; then
     echo "Cannot find command 'sudo'" >&2

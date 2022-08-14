@@ -60,7 +60,7 @@ my @PREPARE_INSTALLS = (
     [ 'install-algorand'  ],
     [ 'install-avalanche' ],
     [ 'install-diablo'    ],
-    [ 'install-libra'     ],
+    [ 'install-diem'      ],
     [ 'install-poa'       ],
     [ 'install-quorum'    ],
     [ 'install-solang'    ],
@@ -93,7 +93,7 @@ my $RUN_RESULT = sub {
 		   $year, $mon, $day, $hour, $min, $sec);
 };
 my @RUN_INSTALLS = ();
-my @RUN_CHAINS = qw(algorand diem quorum-ibft quorum-raft poa libra solana avalanche);
+my @RUN_CHAINS = qw(algorand diem quorum-ibft poa solana avalanche);
 my @RUN_BREAKPOINTS = qw(boot install sync deploy chain benchmark);
 
 

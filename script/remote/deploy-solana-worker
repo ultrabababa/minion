@@ -5,6 +5,7 @@ set -e
 script_name='deploy-solana-worker'
 install_root="${HOME}/install/solana"
 deploy_root="${HOME}/deploy/solana"
+prepare_root="${HOME}/prepare/solana"
 
 
 # Utility functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -51,8 +52,10 @@ prepare() {
 	rm -rf "${deploy_root}"
     fi
 
-    if [ ! -d "${deploy_root}" ] ; then
 	mkdir -p "${deploy_root}"
+
+    if [ ! -d "${prepare_root}" ] ; then
+	mkdir -p "${prepare_root}"
     fi
 
     pkill -f 'multinode-demo' || true
@@ -61,6 +64,23 @@ prepare() {
 
 
 # Generate action - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+initialize_nodes() {
+    local netroot="$1" ; shift
+    local num="$1" ; shift
+
+    for index in $(seq 0 $(( num - 1 ))) ; do
+        local dir="${netroot}/n${index}"
+        local configdir="${dir}/config"
+
+        mkdir -p "${configdir}"
+        cp -r "${install_root}"/{fetch-perf-libs.sh,fetch-spl.sh,scripts,net,multinode-demo} "${dir}"
+
+        solana-keygen new --no-passphrase -so "${configdir}/identity.json"
+        solana-keygen new --no-passphrase -so "${configdir}/vote-account.json"
+        solana-keygen new --no-passphrase -so "${configdir}/stake-account.json"
+    done
+}
 
 generate_nodes() {
     local netroot="$1" ; shift
@@ -78,33 +98,35 @@ generate_nodes() {
 	    dir="${netroot}/n${index}"
         configdir="${dir}/config"
 
-	    mkdir -p "${configdir}"
-        cp -r "${install_root}"/{fetch-perf-libs.sh,fetch-spl.sh,scripts,net,multinode-demo} "${dir}"
 	    echo "${addr}" > "${configdir}/addr"
 	    echo "${rpcport}" > "${configdir}/rpcport"
 	    echo "${gossipport}" > "${configdir}/gossipport"
 	    echo "${dynamicport}" > "${configdir}/dynamicport"
 
-        solana-keygen new --no-passphrase -so "${configdir}/identity.json"
-        solana-keygen new --no-passphrase -so "${configdir}/vote-account.json"
-        solana-keygen new --no-passphrase -so "${configdir}/stake-account.json"
-
 	    index=$(( index + 1 ))
 	done < "${nodefile}"
+
+    local num=$(cat "${nodefile}" | wc -l)
+    dir="${netroot}/n0"
+    configdir="${dir}/config"
+    for i in $(seq 2 ${num}) ; do
+	    path="${netroot}/n$(( i - 1 ))/config"
+        cp "$configdir"/addr "$path/bootstrapaddr"
+        cp "$configdir"/gossipport "$path/bootstrapgossipport"
+    done
 }
 
 generate_genesis() {
     local netroot="$1" ; shift
-    local nodefile="$1" ; shift
+    local num="$1" ; shift
     local keyfile="$1" ; shift
-    local nodenum dir configdir args path
+    local dir configdir args path
 
-    nodenum=$(cat "${nodefile}" | wc -l)
     dir="${netroot}/n0"
     configdir="${dir}/config"
     args=(--primordial-accounts-file "${HOME}/${keyfile}")
 
-    for i in $(seq 2 ${nodenum}) ; do
+    for i in $(seq 2 ${num}) ; do
 	path="${netroot}/n$(( i - 1 ))/config"
     args+=(--bootstrap-validator "${path}/identity.json"
                                  "${path}/vote-account.json"
@@ -124,11 +146,9 @@ generate_genesis() {
     solana-ledger-tool -l "$configdir"/bootstrap-validator shred-version --max-genesis-archive-unpacked-size 1073741824 | tee "$configdir"/shred-version
     solana-ledger-tool -l "$configdir"/bootstrap-validator bank-hash | tee "$configdir"/bank-hash
 
-    for i in $(seq 2 ${nodenum}) ; do
+    for i in $(seq 2 ${num}) ; do
 	path="${netroot}/n$(( i - 1 ))/config"
     cp "$configdir"/{faucet.json,shred-version,bank-hash} "$path"
-    cp "$configdir"/addr "$path/bootstrapaddr"
-    cp "$configdir"/gossipport "$path/bootstrapgossipport"
     done
 }
 
@@ -147,9 +167,21 @@ generate() {
 
     setup_environment
 
-    generate_nodes "${netroot}" "${nodefile}"
+    if [ -e "${netroot}" ] ; then
+	rm -rf "${netroot}"
+    fi
 
-    generate_genesis "${netroot}" "${nodefile}" "${keyfile}"
+    local num=$(cat "${nodefile}" | wc -l)
+    local prepared_path="${prepare_root}/network-${numnode}"
+
+    if [ ! -e "${prepared_path}" ] ; then
+        initialize_nodes "${prepared_path}" "${num}"
+
+        generate_genesis "${prepared_path}" "${num}" "${keyfile}"
+    fi
+    cp -R "${prepared_path}" "${netroot}"
+
+    generate_nodes "${netroot}" "${nodefile}"
 
     tar -C "${deploy_root}" -czf "${netroot}.tar.gz" 'network'
 

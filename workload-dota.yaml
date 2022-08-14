@@ -1,0 +1,10 @@
+# Number of player if all steam players were playing Dota 2
+id: "smart-dota"
+contract: "dota:update"
+txs:
+    0: 13296
+    50: 13313
+    120: 13334
+    200: 13358
+    275: 13425
+    276: 0

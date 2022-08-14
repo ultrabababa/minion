@@ -1,0 +1,5 @@
+# Constant 100 tps
+id: "native-100"
+txs:
+    0: 100
+    120: 0

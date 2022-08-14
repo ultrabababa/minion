@@ -1,0 +1,5 @@
+# Constant 10000 tps
+id: "native-10000"
+txs:
+    0: 10000
+    120: 0

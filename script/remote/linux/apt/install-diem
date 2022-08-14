@@ -1,79 +1,91 @@
-!/bin/bash
- #
- #   install-diem - install the Diem blockchain from its repository
- #
+#!/bin/bash
+#
+#   install-diem - install the Diem blockchain from its repository
+#
 
- set -e
+set -e
 
- diem_url='https://github.com/diem/diem.git'
- diem_checkout='testnet'
+diem_url='https://github.com/diem/diem.git'
+diem_checkout='testnet'
 
- move_url='https://github.com/diem/move.git'
- move_checkout='41a075acca3ef60df936ade6c982a6cc302b9546'
+move_url='https://github.com/diem/move.git'
+move_checkout='41a075acca3ef60df936ade6c982a6cc302b9546'
 
- ncpu=$(cat '/proc/cpuinfo' | grep '^processor[[:space:]]*:' | wc -l)
- njob=$(( ncpu / 2 ))  # OOM otherwise
+rust_version='1.54.0'
+rust_url="https://static.rust-lang.org/dist/rust-${rust_version}-$(uname -m)-unknown-linux-gnu.tar.gz"
 
- if ! command -v 'sudo' > '/dev/null' ; then
-     echo "Cannot find command 'sudo'" >&2
-     exit 1
- fi
+ncpu=$(cat '/proc/cpuinfo' | grep '^processor[[:space:]]*:' | wc -l)
+njob=$(( ncpu / 2 ))  # OOM otherwise
 
- sudo -n apt-get install -yy 'clang' 'cmake' 'gcc' 'git' 'libssl-dev' 'make' \
-      'pkg-config' 'rustc'
+if ! command -v 'sudo' > '/dev/null' ; then
+    echo "Cannot find command 'sudo'" >&2
+    exit 1
+fi
 
- # Create an install dir if not already there.
- #
- if [ ! -e 'install' ] ; then
-     mkdir 'install'
- fi
+sudo -n apt-get install -yy 'clang' 'cmake' 'gcc' 'git' 'libssl-dev' 'make' \
+    'pkg-config'
 
- # Clone Diem from the official repository and build it.
- #
- git clone "${diem_url}" 'install/diem'
- (
-     cd 'install/diem'
+# Create an install dir if not already there.
+#
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
 
-     git checkout "${diem_checkout}"
+if [ ! -e "install/rust${rust_version}" ] ; then
+	curl -L "${rust_url}" | tar --one-top-level="install/rust${rust_version}install" --strip-components=1 -xzf -
+	."/install/rust${rust_version}install/install.sh" --destdir="install/rust${rust_version}" --prefix='' --without=rust-docs --disable-ldconfig
+fi
+export PATH="${PWD}/install/rust${rust_version}/bin:${PATH}"
 
-     # Patch the Diem cli utility program so enabling custom scripts not only
-     # allow any account to execute any script but also allow them to publish
-     # any module.
-     #
-     sed -ri 's/(enable_custom_script\(params, )false(, true\) \{)/\1true\2/' \
- 	'testsuite/cli/src/dev_commands.rs'
+# Clone Diem from the official repository and build it.
+#
+git clone "${diem_url}" 'install/diem'
+(
+    cd 'install/diem'
 
-     export RUSTFLAGS="-Ctarget-cpu=native -Ctarget-feature=+aes,+sse2,+sse4.1,+ssse3"
-     export CARGO_PROFILE_RELEASE_LTO=thin
+    git checkout "${diem_checkout}"
 
-     # I don't know why but the compilation sometimes fails midway for no
-     # reason (although I suspect it's because of out-of-memory).
-     # Restart the compilation a couple of times until it compiles.
-     #
-     for try in $(seq 1 10) ; do
- 	if cargo build --jobs ${njob} --release \
- 		 -p diem-node \
- 		 -p diem-swarm \
- 		 -p cli
- 	then
- 	    break
- 	fi
-     done
- )
+    # Patch the Diem cli utility program so enabling custom scripts not only
+    # allow any account to execute any script but also allow them to publish
+    # any module.
+    #
+    sed -ri 's/(enable_custom_script\(params, )false(, true\) \{)/\1true\2/' \
+'testsuite/cli/src/dev_commands.rs'
 
- # Clone Move from the official repository and build it.
- #
- git clone "${move_url}" 'install/move'
- (
-     cd 'install/move'
+    export RUSTFLAGS="-Ctarget-cpu=native -Ctarget-feature=+aes,+sse2,+sse4.1,+ssse3"
+    export CARGO_PROFILE_RELEASE_LTO=thin
 
-     git checkout "${move_checkout}"
+    # I don't know why but the compilation sometimes fails midway for no
+    # reason (although I suspect it's because of out-of-memory).
+    # Restart the compilation a couple of times until it compiles.
+    #
+    for try in $(seq 1 10) ; do
+if cargo build --jobs ${njob} --release \
+        -p diem-node \
+        -p diem-swarm \
+        -p cli
+then
+    break
+fi
+    done
+)
 
-     # I don't know why but the compilation sometimes fails midway for no
-     # reason (although I suspect it's because of out-of-memory).
-     # Restart the compilation a couple of times until it compiles.
-     #
-     for try in $(seq 1 10) ; do
- 	cargo build --jobs ${njob} && break
-     done
- )
+# Clone Move from the official repository and build it.
+#
+git clone "${move_url}" 'install/move'
+(
+    cd 'install/move'
+
+    git checkout "${move_checkout}"
+
+    export RUSTFLAGS="-Ctarget-cpu=native -Ctarget-feature=+aes,+sse2,+sse4.1,+ssse3"
+    export CARGO_PROFILE_RELEASE_LTO=thin
+
+    # I don't know why but the compilation sometimes fails midway for no
+    # reason (although I suspect it's because of out-of-memory).
+    # Restart the compilation a couple of times until it compiles.
+    #
+    for try in $(seq 1 10) ; do
+    cargo build --jobs ${njob} --release && break
+    done
+)

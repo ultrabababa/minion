@@ -1,0 +1,639 @@
+#!/usr/bin/env -S perl -l
+
+use lib qw(. ./lib);
+use strict;
+use warnings;
+
+use File::Temp qw(tempfile tempdir);
+use Getopt::Long qw(GetOptionsFromArray);
+use IO::Uncompress::Gunzip qw(gunzip);
+use JSON qw(decode_json encode_json);
+use List::Util qw(sum);
+use YAML;
+
+use Minion::Run::Runner;
+use Minion::Ssh;
+use Minion::System::Pgroup;
+
+
+my $RUN_RESULT = sub {
+    my ($sec, $min, $hour, $day, $mon, $year) = localtime(time());
+
+    $year += 1900;
+    $mon += 1;
+
+    return sprintf("%04d-%02d-%02d-%02d-%02d-%02d.results.tar.gz",
+		   $year, $mon, $day, $hour, $min, $sec);
+};
+
+
+sub benchmark
+{
+    my ($workload, $workers) = @_;
+    my ($pair, $worker, $roles, $blockchain, %results, $result, $output);
+    my ($primary, $secondaries, $chain);
+    my ($nworkload, $id, $contract, $accounts);
+
+    $primary = undef;
+    $secondaries = [];
+    $chain = [];
+
+    foreach $pair (@$workers) {
+	($worker, $roles) = @$pair;
+
+	if (grep { $_ eq 'primary' } @$roles) {
+	    $primary = $worker;
+	}
+
+	if (grep { $_ eq 'secondary' } @$roles) {
+	    push(@$secondaries, $worker);
+	}
+
+	if (grep { $_ eq 'chain' } @$roles) {
+	    push(@$chain, $worker);
+	}
+    }
+
+    foreach $blockchain (qw(algorand diem avalanche solana quorum-ibft poa)) {
+	if ($blockchain =~ /algorand/) {
+		$accounts = scalar(@$chain);
+	} elsif ($blockchain =~ /diem/) {
+		$accounts = 2000;
+	} else {
+		$accounts = 10000;
+	}
+	($nworkload, $id, $contract) =
+	convert_workload($workload, $accounts, scalar(@$secondaries));
+    system('cat', $nworkload);
+
+	$result = benchmark_blockchain
+	    ($blockchain, $nworkload, $primary, $secondaries, $chain, $blockchain . '-1-' . scalar(@$secondaries) . '-' . scalar(@$chain) . '-' . $id . '_' . $RUN_RESULT->());
+	$results{$blockchain} = $result;
+    }
+}
+
+sub benchmark_blockchain
+{
+    my ($blockchain, $workload, $primary, $secondaries, $chain, $result) = @_;
+    my ($runner, $worker, $all, $diablo, $path, $instance, $proc, $pgrp, $wd);
+    my ($dir, $base, $full, $compress, $fh);
+
+	if ($result =~ m!^(.*/)?([^/]+)(\.(?:tar\.|t)(?:gz|xz|bzip2))$!) {
+	($dir, $base, $compress) = ($1, $2, $3);
+    } elsif ($result =~ m!^(.*/)?([^/]+)(\.(?:gz|xz|bzip2))$!) {
+	($dir, $base, $compress) = ($1, $2, $3);
+    } elsif ($result =~ m!^(.*/)?([^/]+)$!) {
+	($dir, $base) = ($1, $2);
+	$compress = undef;
+    } else {
+	fatal("failed to parse result path '%s'", $result);
+    }
+
+    if (defined($dir)) {
+	$full = $dir . $base;
+    } else {
+	$full = $base;
+    }
+
+    if (-e $full) {
+	fatal("result '%s' already exists", $full);
+    }
+
+    if (-e $result) {
+	fatal("result '%s' already exists", $result);
+    }
+
+    $runner = Minion::Run::Runner->new(
+	LOCAL  => [ 'script/local/'  ],
+	REMOTE => [ 'script/remote/' ]
+	);
+
+    $all = {};
+    $diablo = {};
+
+    foreach $worker ($primary, @$secondaries) {
+	$diablo->{$worker} = $worker;
+	$all->{$worker} = $worker;
+    }
+
+    foreach $worker (@$chain) {
+	$all->{$worker} = $worker;
+    }
+
+    $all = [ values(%$all) ];
+    $diablo = [ values(%$diablo) ];
+
+    $runner->run($chain, [ $blockchain, 'stop' ])->wait();
+
+    if ($runner->run([ $primary ],
+		     [ 'behave-diablo', 'primary', $workload ])->wait() != 0) {
+	fatal("failed to register diablo primary");
+    }
+
+    if ($runner->run($secondaries,
+		     [ 'behave-diablo', 'secondary' ])->wait() != 0) {
+	fatal("failed to register diablo secondaries");
+    }
+
+    if ($runner->run($chain, [ 'behave-' . $blockchain ])->wait() != 0) {
+	fatal("failed to register blockchain nodes");
+    }
+
+
+    if ($runner->run($all, [ 'deploy' ])->wait() != 0) {
+	fatal("failed to deploy");
+    }
+
+    if ($runner->run($chain, [ $blockchain, 'start' ])->wait() != 0) {
+	fatal("failed to start blockchain");
+    }
+
+    if ($runner->run($diablo, [ 'diablo', 'start' ])->wait() != 0) {
+	fatal("failed to start diablo");
+    }
+
+    if ($runner->run($diablo, [ 'diablo', 'wait' ])->wait() != 0) {
+	fatal("failed to wait diablo");
+    }
+
+    if ($runner->run($chain, [ $blockchain, 'stop' ])->wait() != 0) {
+	fatal("failed to stop blockchain");
+    }
+
+
+    $path = tempdir('eurosys-result.XXXXXX', SUFFIX => '.d', CLEANUP => 1);
+
+    if ($primary->recv([ 'deploy/diablo/primary/results.json.gz' ],
+		       TARGET => $path)->wait() != 0) {
+	fatal("failed to receive results");
+    }
+
+    if (!gunzip($path . '/results.json.gz' => $path . '/results.json')) {
+	fatal("failed to decompress results");
+    }
+
+	mkdir($full);
+    printf("saving results in '%s/results.json.gz' ...\n", $full);
+    if ($primary->recv(
+	    [ 'deploy/diablo/primary/results.json.gz'],
+	    TARGET => $full . '/results.json.gz'
+	)->wait() != 0) {
+
+	fatal("failed to save '%s' from %s ('%s') into '%s'",
+	      "deploy/diablo/primary/results.json.gz", $primary->id(),
+	      $primary->region(), $full . '/results.json.gz');
+    }
+
+	printf("saving setup.yaml in '%s/setup.yaml' ...\n", $full);
+    if ($primary->recv(
+	    [ 'deploy/diablo/primary/setup.yaml'],
+	    TARGET => $full . '/setup.yaml'
+	)->wait() != 0) {
+
+	fatal("failed to save '%s' from %s ('%s') into '%s'",
+	      "deploy/diablo/primary/setup.yaml", $primary->id(),
+	      $primary->region(), $full . '/setup.yaml');
+    }
+
+    system("cd '$full' ; gunzip *.gz");
+    system('cp', $workload, $full . '/workload.yaml');
+
+    printf("saving blockchain name in '%s' ...\n", $full . '/name.txt');
+    if (!open($fh, '>', $full . '/name.txt')) {
+	fatal("failed to open '%s' : %s", $full . '/name.txt', $!);
+    } else {
+	printf($fh "%s\n", $blockchain);
+	close($fh);
+    }
+
+    $pgrp = Minion::System::Pgroup->new([]);
+
+    printf("saving primary logs from %s in '%s' ...\n", $primary->id(),
+	    $full);
+
+    $proc = $primary->recv(
+	[ 'deploy/diablo/primary/out' ],
+	TARGET => $full . '/diablo-primary-' . $primary->id() .
+	          '-out.log'
+	);
+    $pgrp->add($proc);
+
+    $proc = $primary->recv(
+	[ 'deploy/diablo/primary/err' ],
+	TARGET => $full . '/diablo-primary-' . $primary->id() .
+	          '-err.log'
+	);
+    $pgrp->add($proc);
+
+    foreach $instance (@$diablo) {
+	printf("saving secondary logs from %s in '%s' ...\n",
+		$instance->id(), $full);
+
+	$proc = $instance->recv(
+	    [ 'deploy/diablo/secondary0/out' ],
+	    TARGET => $full . '/diablo-secondary-' . $instance->id() .
+	              '-out.log'
+	    );
+	$pgrp->add($proc);
+
+	$proc = $instance->recv(
+	    [ 'deploy/diablo/secondary0/err' ],
+	    TARGET => $full . '/diablo-secondary-' . $instance->id() .
+	              '-err.log'
+	    );
+	$pgrp->add($proc);
+    }
+
+    foreach $instance (@$chain) {
+	printf("saving node logs from %s in '%s' ...\n",
+		$instance->id(), $full);
+
+	$proc = $instance->recv(
+	    [ 'deploy/' . $blockchain . '/*/out' ],
+	    TARGET => $full . '/chain-' . $instance->id() .
+	              '-out.log'
+	    );
+	$pgrp->add($proc);
+
+	$proc = $instance->recv(
+	    [ 'deploy/' . $blockchain . '/*/err' ],
+	    TARGET => $full . '/chain-' . $instance->id() .
+	              '-err.log'
+	    );
+	$pgrp->add($proc);
+    }
+
+    if (grep { $_->exitstatus() != 0 } $pgrp->waitall()) {
+	fatal("failed to save logs");
+    }
+
+    printf("saving topology in '%s' ...\n", $full . '/topology.txt');
+    if (!open($fh, '>', $full . '/topology.txt')) {
+	fatal("failed to open '%s' : %s", $full . '/topology.txt', $!);
+    }
+
+    printf($fh "primary:%s:%s\n", $primary->id(), $primary->region());
+    foreach $instance (@$diablo) {
+	printf($fh "secondary:%s:%s\n", $instance->id(),
+	       $instance->region());
+    }
+    foreach $instance (@$chain) {
+	printf($fh "blockchain:%s:%s\n", $instance->id(),
+	       $instance->region());
+    }
+
+    close($fh);
+
+    if (defined($compress)) {
+	printf("compressing results in '%s' ...\n", $result);
+
+	if (defined($dir)) {
+	    $wd = getcwd();
+	    chdir($dir);
+	}
+
+	system('tar', '--create', '--auto-compress', '--file',
+	       $base . $compress, $base);
+	system('rm', '-rf', $base);
+
+	if (defined($dir)) {
+	    chdir($wd);
+	}
+    }
+
+    return ($path . '/results.json');
+}
+
+sub install
+{
+    my ($workers) = @_;
+    my ($runner, $pair, $worker, $all, $proc, $grp);
+
+    $all = [];
+
+    foreach $pair (@$workers) {
+	($worker, $_) = @$pair;
+	push(@$all, $worker);
+    }
+
+    $runner = Minion::Run::Runner->new(
+	LOCAL  => [ 'script/local/'  ],
+	REMOTE => [ 'script/remote/' ]
+	);
+
+    if ($runner->run($all, [ 'prepare-install' ])->wait() != 0) {
+	fatal("failed to prepare install");
+    }
+
+    if ($runner->run($all, [ 'install-diablo' ])->wait() != 0) {
+	fatal("failed to install diablo");
+    }
+
+    if ($runner->run($all, [ 'install-algorand' ])->wait() != 0) {
+	fatal("failed to install algorand");
+    }
+
+    if ($runner->run($all, [ 'install-diem' ])->wait() != 0) {
+	fatal("failed to install diem");
+    }
+
+    if ($runner->run($all, [ 'install-geth-accounts', '--number=10000' ])->wait() != 0) {
+	fatal("failed to install geth accounts");
+    }
+
+	if ($runner->run($all, [ 'install-avalanche' ])->wait() != 0) {
+	fatal("failed to install avalanche");
+    }
+
+	if ($runner->run($all, [ 'install-solana' ])->wait() != 0) {
+	fatal("failed to install solana");
+    }
+
+	if ($runner->run($all, [ 'install-quorum' ])->wait() != 0) {
+	fatal("failed to install quorum");
+    }
+
+	if ($runner->run($all, [ 'install-poa' ])->wait() != 0) {
+	fatal("failed to install poa");
+    }
+
+	if ($runner->run($all, [ 'install-solidity' ])->wait() != 0) {
+	fatal("failed to install solidity");
+    }
+
+	if ($runner->run($all, [ 'install-solang' ])->wait() != 0) {
+	fatal("failed to install solang");
+    }
+}
+
+sub create_workers
+{
+    my ($setup) = @_;
+    my (@workers, $worker, $node, $user, $ip, $roles);
+    my ($grp, $proc, @event, @failed);
+
+    $grp = Minion::System::Pgroup->new([]);
+
+    foreach $node (@$setup) {
+	($user, $ip, $roles) = @$node;
+
+	$worker = Minion::Ssh->new($ip, USER => $user, LOG => \*STDERR);
+	push(@workers, [ $worker, $roles ]);
+
+	$proc = $worker->execute([ 'true' ]);
+	$grp->add([ $proc, $user, $ip ]);
+    }
+
+    while (scalar(@event = $grp->wait()) > 0) {
+	($proc, $user, $ip) = @event;
+
+	if ($proc->exitstatus() != 0) {
+	    push(@failed, [ $user, $ip ]);
+	}
+    }
+
+    if (scalar(@failed) > 0) {
+	fatal("failed to join workers: %s",
+	      join(', ', map { join('@', @$_) } @failed));
+    }
+
+    return \@workers;
+}
+
+sub read_nodes
+{
+    my ($input) = @_;
+    my ($fh, $line, $user, $ip, $roles, $primary);
+    my ($output, $chain, $secondaries);
+
+    if (!open($fh, '<', $input)) {
+	fatal("cannot read ip file '%s'", $input);
+    }
+
+    $output = [];
+    $primary = undef;
+    $secondaries = 0;
+    $chain = 0;
+
+    while (defined($line = <$fh>)) {
+	chomp($line);
+
+	if ($line =~ /^([^@]+)@([^=]*[^=\s])\s*=\s*((?:primary|secondary|chain)(?:\s*,\s*(?:primary|secondary|chain))*)\s*$/) {
+	    ($user, $ip, $roles) = ($1, $2, $3);
+	} else {
+	    fatal("invalid syntax in '%s': '%s'", $input, $line);
+	}
+
+	$roles =~ s/\s+//g;
+
+	if ($roles =~ /primary/) {
+	    if (defined($primary)) {
+		fatal("primary defined twice: '%s' and '%s'", $primary, $line);
+	    }
+
+	    $primary = $line;
+	}
+
+	if ($roles =~ /secondary/) {
+	    $secondaries += 1;
+	}
+
+	if ($roles =~ /chain/) {
+	    $chain += 1;
+	}
+
+	push(@$output, [ $user, $ip, [ split(',', $roles) ] ]);
+    }
+
+    close($fh);
+
+    return ($output, $chain, $secondaries);
+}
+
+sub convert_workload
+{
+    my ($input, $chain, $secondaries) = @_;
+    my ($fh, $path, $document, $timestamp, $load, $name, $function);
+
+    eval {
+	$document = YAML::LoadFile($input);
+    };
+
+    if ($@) {
+	fatal("cannot load workload '%s'", $input);
+    }
+
+    if (ref($document) ne 'HASH') {
+	fatal("invalid syntax in '%s': not a dictionary", $input);
+    } elsif (!exists($document->{'id'})) {
+	fatal("invalid syntax in '%s': no 'id' field", $input);
+    } elsif (ref($document->{'id'}) ne '') {
+	fatal("invalid syntax in '%s': 'id' is not a string", $input);
+    } elsif (!exists($document->{'txs'})) {
+	fatal("invalid syntax in '%s': no 'txs' field", $input);
+    } elsif (ref($document->{'txs'}) ne 'HASH') {
+	fatal("invalid syntax in '%s': 'txs' is not a dictionary", $input);
+    }
+
+    ($fh, $path) = tempfile('eurosys-workload.XXXXXX', SUFFIX => '.yaml',
+			    UNLINK => 1);
+
+    printf($fh <<"EOF");
+let:
+  - !loop &loc { sample: !location [ ".*" ] }
+  - &end { sample: !endpoint [ ".*" ] }
+  - !loop &acc { sample: !account { number: $chain, stake: 1000 } }
+EOF
+
+    if (exists($document->{'contract'})) {
+	if (ref($document->{'contract'}) ne '') {
+	    fatal("invalid syntax in '%s': 'contract' is not a string",$input);
+	}
+
+	if ($document->{'contract'} =~ /^([^:]+):(.*)$/) {
+	    ($name, $function) = ($1, $2);
+	} else {
+	    fatal("invalid contract name: '%s'", $document->{'contract'});
+	}
+
+	printf($fh <<"EOF");
+  - &dapp { sample: !contract { name: "$name" } }
+EOF
+    }
+
+    printf($fh <<"EOF");
+workloads:
+  - number: $secondaries
+    client:
+      location: *loc
+      view: *end
+      behavior:
+        - load:
+EOF
+
+    foreach $timestamp (sort { $a <=> $b } keys(%{$document->{'txs'}})) {
+	$load = $document->{'txs'}->{$timestamp};
+
+	if ($timestamp !~ /^\d+(:?\.\d*)?$/) {
+	    fatal("invalid syntax in '%s': invalid timestamp '%s'", $input,
+		$timestamp);
+	} elsif ($load !~ /^\d+(:?\.\d*)?$/) {
+	    fatal("invalid syntax in '%s': invalid load '%s'", $input, $load);
+	}
+
+	$load /= $secondaries;
+
+	printf($fh <<"EOF");
+            $timestamp: $load
+EOF
+    }
+
+    if (exists($document->{'contract'})) {
+	printf($fh <<"EOF");
+          interaction: !invoke
+            from: *acc
+            contract: *dapp
+            function: "$function()"
+EOF
+    } else {
+	printf($fh <<'EOF');
+          interaction: !transfer
+            from: *acc
+            to: *acc
+EOF
+    }
+
+    return ($path, $document->{'id'}, $document->{'contract'});
+}
+
+sub fatal
+{
+    my ($format, @args) = @_;
+
+    printf(STDERR "%s: " . $format . "\n", $0, @args);
+    printf(STDERR "Please type '%s --help' for more information\n", $0);
+
+    exit (1);
+}
+
+sub usage
+{
+    return <<"EOF";
+Usage: $0 [--skip-install] <workload-file> <ip-file> <output-file>
+
+***
+This is a prototype script.
+It contains bugs and should not be used in production .
+***
+
+Run the benchmark specified in <workload-file> on the machines specified in
+<ip-file> and produce an evaluation output in <output-file>.
+Unless the '--skip-install' option is specified, start by installing the
+benchmark platform and the blockchains on the benchmark machines.
+The installation may take some time.
+
+Benchmarked blockchains:
+
+  - algorand
+  - diem
+
+Possible contracts:
+
+  - counter:add
+  - dota:update
+  - gafam:buy
+  - microsoft:buy
+  - uber:find
+  - youtube:upload
+
+Setup file syntax:
+
+  <ssh-user0>@<ip0> = <roles>
+  <ssh-user1>@<ip1> = <roles>
+  ...
+
+Where <roles> is a coma separated list of roles among:
+
+  - primary        the benchmark controler (must be unique)
+  - secondary      a benchmark worker
+  - chain          a blockchain node
+
+EOF
+}
+
+sub main
+{
+    my ($workload, $setup, @err);
+    my ($id, $chain, $contract, $secondaries, $workers, $skip_install);
+
+    GetOptionsFromArray(
+	\@_,
+	'h|help' => sub { printf("%s", usage()); exit (0); },
+	'skip-install' => \$skip_install
+	);
+
+    ($workload, $setup, @err) = @_;
+
+    if (!defined($workload)) {
+	fatal('missing <workload-file> operand');
+    } elsif (!defined($setup)) {
+	fatal('missing <ip-file> operand');
+    } elsif (@err) {
+	fatal("unexpected operand: '%s'", shift(@err));
+    }
+
+    ($setup, $chain, $secondaries) = read_nodes($setup);
+    $workers = create_workers($setup);
+
+    if (!$skip_install) {
+	install($workers);
+    }
+
+    benchmark($workload, $workers);
+
+    return 0;
+}
+
+
+exit (main(@ARGV));
+__END__

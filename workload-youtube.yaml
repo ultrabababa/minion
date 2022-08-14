@@ -1,0 +1,10 @@
+# Number of request and upload on Youtube,note that the value of 'data' should be equal to 1'545'064 byte
+id: "smart-youtube"
+contract: "youtube:upload"
+txs:
+    0: 38020
+    40: 38545
+    75: 38761
+    90: 39437
+    100: 38472
+    101: 0

@@ -1,0 +1,19 @@
+# Apple transactions when the NASDAQ market opens
+id: "smart-apple"
+contract: "microsoft:buy"
+txs:
+    0: 10000
+    1: 47
+    15: 23
+    30: 54
+    45: 60
+    60: 18
+    75: 45
+    90: 55
+    105: 23
+    120: 22
+    135: 20
+    150: 20
+    165: 27
+    180: 47
+    181: 0

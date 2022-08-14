@@ -5,6 +5,9 @@
 
 set -e
 
+golang_version='1.17.9'
+golang_url="https://go.dev/dl/go${golang_version}.linux-$(dpkg --print-architecture).tar.gz"
+
 rust_version='1.59.0'
 rust_url="https://static.rust-lang.org/dist/rust-${rust_version}-$(uname -m)-unknown-linux-gnu.tar.gz"
 
@@ -12,7 +15,7 @@ golang_version='1.17.9'
 golang_url="https://go.dev/dl/go${golang_version}.linux-$(dpkg --print-architecture).tar.gz"
 
 solana_url='https://github.com/solana-labs/solana.git'
-solana_checkout='master'
+solana_checkout='0d369616e7e663355c682a156071ce66ba5a434a'
 
 if ! command -v 'sudo' > '/dev/null' ; then
     echo "Cannot find command 'sudo'" >&2
@@ -29,6 +32,7 @@ done
 if [ ! -e 'install' ] ; then
     mkdir 'install'
 fi
+export PATH="${PWD}/install/go${golang_version}/bin:${PATH}"
 
 # Install common utilities, cargo, and Solana build dependencies.
 #

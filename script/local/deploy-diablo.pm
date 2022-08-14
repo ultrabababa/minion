@@ -9,7 +9,7 @@ use List::Util qw(sum);
 use Minion::System::Pgroup;
 
 
-my $PRIMARY_TCP_PORT = 5000;
+my $PRIMARY_TCP_PORT = 5001;
 
 
 my $FLEET = $_;                        # Global parameter (setup by the Runner)
@@ -38,7 +38,6 @@ my $KEYS_LOC = $DEPLOY . '/keys.json';
 
 my $ALGORAND_PATH = $SHARED . '/algorand';
 my $DIEM_PATH = $SHARED . '/diem';
-my $LIBRA_CHAIN_PATH = $SHARED . '/libra/chain.yaml';
 my $POA_PATH = $SHARED . '/poa';
 my $QUORUMIBFT_PATH = $SHARED . '/quorum-ibft';
 my $QUORUMRAFT_CHAIN_PATH = $SHARED . '/quorum-raft/chain.yaml';
@@ -250,11 +249,6 @@ sub deploy_diablo_diem
     return deploy_diablo_primary($primary, $DIEM_PATH);
 }
 
-sub deploy_diablo_libra
-{
-    return deploy_diablo_chain(@_, $LIBRA_CHAIN_PATH);
-}
-
 sub deploy_diablo_poa
 {
     my ($nodes) = @_;
@@ -415,20 +409,12 @@ sub deploy_diablo
 	return deploy_diablo_diem($nodes);
     }
 
-    if (-f $LIBRA_CHAIN_PATH) {
-	return deploy_diablo_libra($nodes, $primary, \@secondaries);
-    }
-
     if (-f ($POA_PATH . '/setup.yaml')) {
 	return deploy_diablo_poa($nodes);
     }
 
     if (-f ($QUORUMIBFT_PATH . '/setup.yaml')) {
 	return deploy_diablo_quorum_ibft($nodes);
-    }
-
-    if (-f $QUORUMRAFT_CHAIN_PATH) {
-	return deploy_diablo_quorum_raft($nodes, $primary, \@secondaries);
     }
 
 	if (-f ($SOLANA_PATH . '/setup.yaml')) {

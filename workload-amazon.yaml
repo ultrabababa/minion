@@ -1,0 +1,19 @@
+# Amazon transactions when the NASDAQ market opens
+id: "smart-amazon"
+contract: "microsoft:buy"
+txs:
+    0: 1300
+    2: 20
+    15: 3
+    30: 4
+    45: 6
+    60: 2
+    75: 1
+    90: 4
+    105: 5
+    120: 6
+    135: 4
+    150: 3
+    165: 2
+    180: 1
+    181: 0

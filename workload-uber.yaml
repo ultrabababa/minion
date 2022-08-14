@@ -1,0 +1,10 @@
+# Number of request and calcul of distance on Uber App
+id: "smart-uber"
+contract: "uber:find"
+txs:
+    0: 810
+    40: 840
+    75: 885
+    90: 900
+    120: 850
+    121: 0

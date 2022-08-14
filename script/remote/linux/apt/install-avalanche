@@ -5,10 +5,10 @@
 
 set -e
 
-golang_url="https://go.dev/dl/go1.16.8.linux-$(dpkg --print-architecture).tar.gz"
+golang_url="https://go.dev/dl/go1.17.9.linux-$(dpkg --print-architecture).tar.gz"
 
 avalanche_url='https://github.com/ava-labs/avalanchego'
-avalanche_checkout='master'
+avalanche_checkout='7840200f865b6d6629866330d5fdf95bd4010ae9'
 
 if ! command -v 'sudo' > '/dev/null' ; then
     echo "Cannot find command 'sudo'" >&2
@@ -20,14 +20,14 @@ while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 ; do
     sleep 5
 done
 
-# Install common utilities as well as golang 1.16.8.
+# Install common utilities as well as golang 1.17.9.
 # This specific version of golang is required by Avalanche.
 # We install it along the standard golang version and add it to the PATH when
 # building Avalanche.
 #
 sudo -n apt-get -o DPkg::Lock::Timeout=1200 install -yy 'git' 'make' 'gcc' 'g++'
-curl -L "${golang_url}" | tar --one-top-level='install/go1.16.8' --strip-components=1 -xzf -
-export PATH="${PWD}/install/go1.16.8/bin:${PATH}"
+curl -L "${golang_url}" | tar --one-top-level='install/go1.17.9' --strip-components=1 -xzf -
+export PATH="${PWD}/install/go1.17.9/bin:${PATH}"
 
 # Create an install dir if not already there.
 #

@@ -5,20 +5,22 @@
 
 set -e
 
+golang_url="https://go.dev/dl/go1.16.15.linux-$(dpkg --print-architecture).tar.gz"
+
 geth_url='https://github.com/ethereum/go-ethereum'
-geth_checkout='master'
+geth_checkout='72c2c0ae7e2332b08d3e1ebfe5f850a92e26e8a1'
 
 if ! command -v 'sudo' > '/dev/null' ; then
     echo "Cannot find command 'sudo'" >&2
     exit 1
 fi
 
-# Install common utilities as well as golang 1.14.
-# This specific version of golang is required by Algorand.
+# Install common utilities as well as golang 1.16.
+# This specific version of golang is required by POA.
 # We install it along the standard golang version and add it to the PATH when
-# building Algorand.
+# building POA.
 #
-sudo -n apt-get install -yy 'git' 'golang-1.14' 'make'
+sudo -n apt-get install -yy 'git' 'make'
 
 # Create an install dir if not already there.
 #
@@ -26,7 +28,10 @@ if [ ! -e 'install' ] ; then
     mkdir 'install'
 fi
 
-# Clone Algorand from the official repository and build it.
+curl -L "${golang_url}" | tar --one-top-level='install/go1.16.15' --strip-components=1 -xzf -
+export PATH="${PWD}/install/go1.16.15/bin:${PATH}"
+
+# Clone POA from the official repository and build it.
 #
 git clone "${geth_url}" 'install/poa'
 (
@@ -34,8 +39,6 @@ git clone "${geth_url}" 'install/poa'
 
     git checkout "${geth_checkout}"
 
-
-    export PATH="/usr/lib/go-1.14/bin:${PATH}"
 
     # Avoid modification outside of this repository.
     # This is important because some other installed software could use

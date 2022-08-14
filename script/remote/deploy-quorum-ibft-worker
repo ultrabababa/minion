@@ -5,6 +5,7 @@ set -e
 script_name='deploy-quorum-ibft-worker'
 install_root="${HOME}/install/quorum"
 deploy_root="${HOME}/deploy/quorum-ibft"
+prepare_root="${HOME}/prepare/quorum-ibft"
 
 
 # Utility functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -52,8 +53,14 @@ prepare() {
 	fatal "unexpected operand '$1'"
     fi
 
-    if [ ! -d "${deploy_root}" ] ; then
+    if [ -e "${deploy_root}" ] ; then
+	rm -rf "${deploy_root}"
+    fi
+
 	mkdir -p "${deploy_root}"
+
+    if [ ! -d "${prepare_root}" ] ; then
+	mkdir -p "${prepare_root}"
     fi
 }
 
@@ -64,13 +71,9 @@ prepare_netroot() {
     local netroot="$1" ; shift
     local num i
 
-    if [ -e "${netroot}" ] ; then
-	rm -rf "${netroot}"
-    fi
-
     num=$(cat "${nodefile}" | wc -l)
 
-    mkdir "${netroot}"
+    mkdir -p "${netroot}"
     for i in $(seq 0 $(( num - 1 ))) ; do
 	mkdir "${netroot}/n${i}"
     done
@@ -168,26 +171,34 @@ generate() {
 
     setup_environment
 
-    prepare_netroot "${netroot}"
+    if [ -e "${netroot}" ] ; then
+	rm -rf "${netroot}"
+    fi
 
     num=$(cat "${nodefile}" | wc -l)
+    local prepared_path="${prepare_root}/network-${numnode}"
 
-    (
-	cd "${netroot}"
+    if [ ! -e "${prepared_path}" ] ; then
+        prepare_netroot "${prepared_path}"
 
-	if ! istanbul setup --num ${num} --nodes --quorum --save --verbose \
-	     > 'istanbul.log' 2>&1 ; then
-	    cat 'istanbul.log' >&2
-	    rm 'istanbul.log'
-	    return 1
-	fi
+        (
+        cd "${prepared_path}"
 
-	rm 'istanbul.log'
-    )
+        if ! istanbul setup --num ${num} --nodes --quorum --save --verbose \
+            > 'istanbul.log' 2>&1 ; then
+            cat 'istanbul.log' >&2
+            rm 'istanbul.log'
+            return 1
+        fi
+
+        rm 'istanbul.log'
+        )
+
+        initialize_accounts "${prepared_path}/genesis.json" "${keyfile}"
+    fi
+    cp -R "${prepared_path}" "${netroot}"
 
     set_nodes_ip_port "${netroot}/static-nodes.json" "${nodefile}"
-
-    initialize_accounts "${netroot}/genesis.json" "${keyfile}"
 
     initialize_nodes "${netroot}" "${nodefile}"
 

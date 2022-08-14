@@ -58,6 +58,10 @@ sub generate_setup
 
     printf($ofh "interface: \"diem\"\n");
     printf($ofh "\n");
+    printf($ofh "parameters:\n");
+	printf($ofh "  confirm: \"pollblk\"\n");
+	printf($ofh "  mintkey: \"deploy/diablo/primary/mint.key\"\n");
+    printf($ofh "\n");
     printf($ofh "endpoints:\n");
 
     foreach $tags (keys(%groups)) {
@@ -140,6 +144,11 @@ sub deploy_diem
 
     if (!move($simd->shared() . '/accounts.yaml',
 	      $DIEM_PATH . '/accounts.yaml')) {
+	return 0;
+    }
+
+	if (!move($simd->shared() . '/mint.key',
+	      $DIEM_PATH . '/mint.key')) {
 	return 0;
     }
 

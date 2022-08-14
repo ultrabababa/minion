@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e
-set -x
 
 install_root="${HOME}/install/diem"
 deploy_root="${HOME}/deploy/diem"
@@ -10,6 +9,7 @@ test -e "${install_root}"
 
 export PATH="${install_root}/target/release:${PATH}"
 export PRIVATE_CONFIG=ignore
+export RUST_LOG=warn
 
 command -v 'diem-node' > '/dev/null'
 

@@ -380,6 +380,9 @@ EOF
 
     go mod init "algorand-chainfile-generator"
 
+	go get github.com/algorand/go-algorand-sdk@v1.6.0
+	go get github.com/algorand/go-algorand@116c06e
+
     go mod tidy
 
     go build -o algorand-chainfile-generator

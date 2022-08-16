@@ -5,9 +5,6 @@
 
 set -e
 
-golang_version='1.17.9'
-golang_url="https://go.dev/dl/go${golang_version}.linux-$(dpkg --print-architecture).tar.gz"
-
 rust_version='1.59.0'
 rust_url="https://static.rust-lang.org/dist/rust-${rust_version}-$(uname -m)-unknown-linux-gnu.tar.gz"
 
@@ -32,7 +29,6 @@ done
 if [ ! -e 'install' ] ; then
     mkdir 'install'
 fi
-export PATH="${PWD}/install/go${golang_version}/bin:${PATH}"
 
 # Install common utilities, cargo, and Solana build dependencies.
 #
@@ -68,6 +64,8 @@ git clone "${solana_url}" 'install/solana'
     sed -i 's/"$cargo"/cargo/g' scripts/cargo-install-all.sh
 
     ./scripts/cargo-install-all.sh --validator-only .
+
+	sudo find . -not \( -path './bin/deps' -o -path './bin/perf-libs' -o -path './bin/solana-genesis' -o -path './bin/solana-gossip' -o -path './bin/solana-keygen' -o -path './bin/solana-ledger-tool'  -o -path './bin/solana-validator' -o -path './fetch-perf-libs.sh' -o -path './fetch-spl.sh' -o -path './multinode-demo' -o -path './net' -o -path './scripts' \) -delete
 )
 
 mkdir 'install/solana-accounts'
@@ -132,4 +130,8 @@ EOF
     go run 'main.go' accounts.yaml 50000000000 10000
     sed -i '1d' accounts.yaml
     echo "" >> accounts.yaml
+
+	sudo find . -not -path './accounts.yaml' -delete
 )
+
+sudo rm -rf "${HOME}/install/rust${rust_version}" "${HOME}/install/rust${rust_version}install" "${HOME}/install/go${golang_version}"

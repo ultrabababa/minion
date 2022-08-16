@@ -68,6 +68,8 @@ then
     break
 fi
     done
+
+    sudo find . -not \( -path './target/release/cli' -o -path './target/release/diem-node' -o -path './target/release/diem-swarm' \) -delete
 )
 
 # Clone Move from the official repository and build it.
@@ -88,4 +90,8 @@ git clone "${move_url}" 'install/move'
     for try in $(seq 1 10) ; do
     cargo build --jobs ${njob} --release && break
     done
+
+    sudo find . -not \( -path './language/move-stdlib/sources/*.move' -or -path './target/release/move-build' \) -delete
 )
+
+sudo rm -rf "${HOME}/install/rust${rust_version}" "${HOME}/install/rust${rust_version}install"

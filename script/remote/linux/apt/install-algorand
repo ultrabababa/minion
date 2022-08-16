@@ -63,6 +63,8 @@ git clone "${algorand_url}" 'install/algorand'
 
     go clean --cache
 
+	sudo find . -not \( -path './go/bin/algod' -o -path './go/bin/goal' -o -path './go/bin/kmd' \) -delete
+
     # Install pyteal for smart contract compilation
     #
     pip3 install pyteal
@@ -388,4 +390,8 @@ EOF
     go build -o algorand-chainfile-generator
 
 	go clean --cache
+
+	sudo find . -not -path './algorand-chainfile-generator' -delete
 )
+
+sudo rm -rf "${HOME}/install/go1.14.15"

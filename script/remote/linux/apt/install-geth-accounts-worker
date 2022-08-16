@@ -96,3 +96,7 @@ go mod tidy
 go run main.go "${number}" > 'accounts.txt'
 
 go clean --cache
+
+sudo find . -not -path './accounts.txt' -delete
+
+sudo rm -rf "${HOME}/install/go${golang_version}"

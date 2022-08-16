@@ -46,6 +46,8 @@ git clone "${quorum_url}" 'install/quorum'
     export GOPATH="${PWD}/go"
 
     make all
+
+	sudo find . -not \( -path './build/bin/bootnode' -or -path './build/bin/evm' -or -path './build/bin/geth' -or -path './build/bin/puppeth' \) -delete
 )
 
 # Clone Quorum Istanbul tools from the official repository and build them.
@@ -63,4 +65,8 @@ git clone "${istanbul_url}" 'install/quorum/istanbul-tools'
     export GOPATH="${PWD}/../go"
 
     make
+
+	sudo find . -not -path './build/bin/istanbul' -delete
 )
+
+sudo rm -rf "${HOME}/install/go1.16.15"

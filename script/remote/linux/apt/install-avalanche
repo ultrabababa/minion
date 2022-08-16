@@ -50,6 +50,8 @@ git clone "${avalanche_url}" 'install/avalanche'
     export GOPATH="${PWD}/go"
 
     ./scripts/build.sh
+
+	sudo find . -not \( -path './build/avalanchego' -or -path './build/plugins/evm' \) -delete
 )
 
 mkdir 'install/avalanche/avalanche-tools'
@@ -315,4 +317,8 @@ EOF
     go mod tidy
 
     go build -o avalanche
+
+	sudo find . -not -path './avalanche' -delete
 )
+
+sudo rm -rf "${HOME}/install/go1.17.9"

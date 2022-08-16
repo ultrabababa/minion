@@ -59,4 +59,8 @@ git clone "${diablo_url}" 'install/diablo'
     make diablo
 
     go clean --cache
+
+    sudo find . -not \( -path './diablo' -or -path './move-contracts/*' -or -path './solidity-contracts/*' -or -path './teal-contracts/*' \) -delete
 )
+
+sudo rm -rf "${HOME}/install/go${golang_version}"

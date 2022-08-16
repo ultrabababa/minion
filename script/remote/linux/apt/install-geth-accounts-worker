@@ -97,6 +97,6 @@ go run main.go "${number}" > 'accounts.txt'
 
 go clean --cache
 
-sudo find . -not -path './accounts.txt' -delete
+sudo find . -not -path './accounts.txt' -delete || true
 
 sudo rm -rf "${HOME}/install/go${golang_version}"

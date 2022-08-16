@@ -51,7 +51,7 @@ git clone "${avalanche_url}" 'install/avalanche'
 
     ./scripts/build.sh
 
-	sudo find . -not \( -path './build/avalanchego' -or -path './build/plugins/evm' \) -delete
+	sudo find . -not \( -path './build/avalanchego' -or -path './build/plugins/evm' \) -delete || true
 )
 
 mkdir 'install/avalanche/avalanche-tools'
@@ -318,7 +318,7 @@ EOF
 
     go build -o avalanche
 
-	sudo find . -not -path './avalanche' -delete
+	sudo find . -not -path './avalanche' -delete || true
 )
 
 sudo rm -rf "${HOME}/install/go1.17.9"

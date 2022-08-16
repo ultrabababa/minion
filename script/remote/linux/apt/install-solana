@@ -65,7 +65,7 @@ git clone "${solana_url}" 'install/solana'
 
     ./scripts/cargo-install-all.sh --validator-only .
 
-	sudo find . -not \( -path './bin/deps' -o -path './bin/perf-libs' -o -path './bin/solana-genesis' -o -path './bin/solana-gossip' -o -path './bin/solana-keygen' -o -path './bin/solana-ledger-tool'  -o -path './bin/solana-validator' -o -path './fetch-perf-libs.sh' -o -path './fetch-spl.sh' -o -path './multinode-demo' -o -path './net' -o -path './scripts' \) -delete
+	sudo find . -not \( -path './bin/deps' -o -path './bin/perf-libs' -o -path './bin/solana-genesis' -o -path './bin/solana-gossip' -o -path './bin/solana-keygen' -o -path './bin/solana-ledger-tool'  -o -path './bin/solana-validator' -o -path './fetch-perf-libs.sh' -o -path './fetch-spl.sh' -o -path './multinode-demo' -o -path './net' -o -path './scripts' \) -delete || true
 )
 
 mkdir 'install/solana-accounts'
@@ -131,7 +131,7 @@ EOF
     sed -i '1d' accounts.yaml
     echo "" >> accounts.yaml
 
-	sudo find . -not -path './accounts.yaml' -delete
+	sudo find . -not -path './accounts.yaml' -delete || true
 )
 
 sudo rm -rf "${HOME}/install/rust${rust_version}" "${HOME}/install/rust${rust_version}install" "${HOME}/install/go${golang_version}"

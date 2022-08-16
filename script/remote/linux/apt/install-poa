@@ -48,7 +48,7 @@ git clone "${geth_url}" 'install/poa'
 
     make all
 
-	sudo find . -not \( -path './build/bin/bootnode' -or -path './build/bin/evm' -or -path './build/bin/geth' -or -path './build/bin/puppeth' \) -delete
+	sudo find . -not \( -path './build/bin/bootnode' -or -path './build/bin/evm' -or -path './build/bin/geth' -or -path './build/bin/puppeth' \) -delete || true
 )
 
 sudo rm -rf "${HOME}/install/go1.16.15"

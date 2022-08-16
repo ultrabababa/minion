@@ -559,7 +559,7 @@ sub fatal
 sub usage
 {
     return <<"EOF";
-Usage: $0 [--skip-install] <workload-file> <ip-file> <output-file>
+Usage: $0 [--skip-install] <workload-file> <ip-file>
 
 ***
 This is a prototype script.
@@ -567,7 +567,7 @@ It contains bugs and should not be used in production .
 ***
 
 Run the benchmark specified in <workload-file> on the machines specified in
-<ip-file> and produce an evaluation output in <output-file>.
+<ip-file>.
 Unless the '--skip-install' option is specified, start by installing the
 benchmark platform and the blockchains on the benchmark machines.
 The installation may take some time.
@@ -576,6 +576,10 @@ Benchmarked blockchains:
 
   - algorand
   - diem
+  - avalanche
+  - solana
+  - quorum-ibft
+  - poa
 
 Possible contracts:
 

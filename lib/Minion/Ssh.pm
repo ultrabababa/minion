@@ -109,6 +109,33 @@ sub host
     return $self->{__PACKAGE__()}->{_host};
 }
 
+sub public_ip
+{
+    my ($self, @err) = @_;
+
+    confess() if (@err);
+
+    return $self->{__PACKAGE__()}->{_host};
+}
+
+sub region
+{
+    my ($self, @err) = @_;
+
+    confess() if (@err);
+
+    return "generic-region";
+}
+
+sub id
+{
+    my ($self, @err) = @_;
+
+    confess() if (@err);
+
+    return $self->{__PACKAGE__()}->{_host};
+}
+
 sub port
 {
     my ($self, @err) = @_;

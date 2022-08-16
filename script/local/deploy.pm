@@ -26,10 +26,6 @@ if ($RUNNER->run($FLEET, [ 'deploy-diem' ])->wait() != 0) {
     die ("failed to deploy diem");
 }
 
-if ($RUNNER->run($FLEET, [ 'deploy-libra' ])->wait() != 0) {
-    die ("failed to deploy libra");
-}
-
 if ($RUNNER->run($FLEET, [ 'deploy-poa' ])->wait() != 0) {
     die ("failed to deploy poa");
 }

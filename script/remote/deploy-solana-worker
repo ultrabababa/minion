@@ -74,7 +74,7 @@ initialize_nodes() {
         local configdir="${dir}/config"
 
         mkdir -p "${configdir}"
-        cp -r "${install_root}"/{fetch-perf-libs.sh,fetch-spl.sh,scripts,net,multinode-demo} "${dir}"
+        cp -R "${install_root}"/{fetch-perf-libs.sh,fetch-spl.sh,scripts,net,multinode-demo} "${dir}"
 
         solana-keygen new --no-passphrase -so "${configdir}/identity.json"
         solana-keygen new --no-passphrase -so "${configdir}/vote-account.json"
@@ -171,13 +171,13 @@ generate() {
 	rm -rf "${netroot}"
     fi
 
-    local num=$(cat "${nodefile}" | wc -l)
+    local numnode=$(cat "${nodefile}" | wc -l)
     local prepared_path="${prepare_root}/network-${numnode}"
 
     if [ ! -e "${prepared_path}" ] ; then
-        initialize_nodes "${prepared_path}" "${num}"
+        initialize_nodes "${prepared_path}" "${numnode}"
 
-        generate_genesis "${prepared_path}" "${num}" "${keyfile}"
+        generate_genesis "${prepared_path}" "${numnode}" "${keyfile}"
     fi
     cp -R "${prepared_path}" "${netroot}"
 

@@ -135,7 +135,7 @@ sub benchmark_blockchain
 	fatal("failed to register diablo secondaries");
     }
 
-    if ($runner->run($chain, [ 'behave-' . $blockchain ])->wait() != 0) {
+    if ($runner->run($chain, [ 'behave-' . $blockchain, '--number=4' ])->wait() != 0) {
 	fatal("failed to register blockchain nodes");
     }
 

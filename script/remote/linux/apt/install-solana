@@ -65,7 +65,7 @@ git clone "${solana_url}" 'install/solana'
 
     ./scripts/cargo-install-all.sh --validator-only .
 
-	sudo find . -not \( -path './bin/deps' -o -path './bin/perf-libs' -o -path './bin/solana-genesis' -o -path './bin/solana-gossip' -o -path './bin/solana-keygen' -o -path './bin/solana-ledger-tool'  -o -path './bin/solana-validator' -o -path './fetch-perf-libs.sh' -o -path './fetch-spl.sh' -o -path './multinode-demo' -o -path './net' -o -path './scripts' \) -delete || true
+	sudo find . -not \( -path './bin/deps/*' -o -path './bin/perf-libs/*' -o -path './bin/solana-genesis' -o -path './bin/solana-gossip' -o -path './bin/solana-keygen' -o -path './bin/solana-ledger-tool'  -o -path './bin/solana-validator' -o -path './fetch-perf-libs.sh' -o -path './fetch-spl.sh' -o -path './multinode-demo/*' -o -path './net/*' -o -path './scripts/*' \) -delete || true
 )
 
 mkdir 'install/solana-accounts'

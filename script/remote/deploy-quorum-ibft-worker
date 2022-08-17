@@ -167,7 +167,7 @@ generate() {
     local nodefile="$1" ; shift
     local keyfile="$1" ; shift
     local netroot="${deploy_root}/network"
-    local num
+    local numnode
 
     setup_environment
 
@@ -175,7 +175,7 @@ generate() {
 	rm -rf "${netroot}"
     fi
 
-    num=$(cat "${nodefile}" | wc -l)
+    numnode=$(cat "${nodefile}" | wc -l)
     local prepared_path="${prepare_root}/network-${numnode}"
 
     if [ ! -e "${prepared_path}" ] ; then
@@ -184,7 +184,7 @@ generate() {
         (
         cd "${prepared_path}"
 
-        if ! istanbul setup --num ${num} --nodes --quorum --save --verbose \
+        if ! istanbul setup --num ${numnode} --nodes --quorum --save --verbose \
             > 'istanbul.log' 2>&1 ; then
             cat 'istanbul.log' >&2
             rm 'istanbul.log'

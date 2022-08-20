@@ -46,7 +46,10 @@ git clone "${geth_url}" 'install/poa'
     #
     export GOPATH="${PWD}/go"
 
-    make all
+    env GO111MODULE=on go run build/ci.go install ./cmd/bootnode
+    env GO111MODULE=on go run build/ci.go install ./cmd/evm
+    env GO111MODULE=on go run build/ci.go install ./cmd/geth
+    env GO111MODULE=on go run build/ci.go install ./cmd/puppeth
 
 	sudo find . -not \( -path './build/bin/bootnode' -or -path './build/bin/evm' -or -path './build/bin/geth' -or -path './build/bin/puppeth' \) -delete || true
 )

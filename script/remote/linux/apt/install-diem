@@ -11,7 +11,7 @@ diem_checkout='testnet'
 move_url='https://github.com/diem/move.git'
 move_checkout='41a075acca3ef60df936ade6c982a6cc302b9546'
 
-rust_version='1.54.0'
+rust_version='1.63.0'
 rust_url="https://static.rust-lang.org/dist/rust-${rust_version}-$(uname -m)-unknown-linux-gnu.tar.gz"
 
 ncpu=$(cat '/proc/cpuinfo' | grep '^processor[[:space:]]*:' | wc -l)
@@ -52,8 +52,11 @@ git clone "${diem_url}" 'install/diem'
     sed -ri 's/(enable_custom_script\(params, )false(, true\) \{)/\1true\2/' \
 'testsuite/cli/src/dev_commands.rs'
 
+    export CARGO_HOME="${PWD}/.cargo"
     export RUSTFLAGS="-Ctarget-cpu=native -Ctarget-feature=+aes,+sse2,+sse4.1,+ssse3"
     export CARGO_PROFILE_RELEASE_LTO=thin
+    cargo update -p tokio --precise 1.11.0
+    sed -ri ':begin;N;$!bbegin;s/(\[profile\.release\]\ndebug = )true/\1false\nstrip = true/' Cargo.toml
 
     # I don't know why but the compilation sometimes fails midway for no
     # reason (although I suspect it's because of out-of-memory).
@@ -80,15 +83,17 @@ git clone "${move_url}" 'install/move'
 
     git checkout "${move_checkout}"
 
+    export CARGO_HOME="${PWD}/.cargo"
     export RUSTFLAGS="-Ctarget-cpu=native -Ctarget-feature=+aes,+sse2,+sse4.1,+ssse3"
     export CARGO_PROFILE_RELEASE_LTO=thin
+    sed -ri ':begin;N;$!bbegin;s/(\[profile\.release\]\ndebug = )true/\1false\nstrip = true/' Cargo.toml
 
     # I don't know why but the compilation sometimes fails midway for no
     # reason (although I suspect it's because of out-of-memory).
     # Restart the compilation a couple of times until it compiles.
     #
     for try in $(seq 1 10) ; do
-    cargo build --jobs ${njob} --release && break
+    cargo build --jobs ${njob} --release -p move-lang && break
     done
 
     sudo find . -not \( -path './language/move-stdlib/sources/*.move' -or -path './target/release/move-build' \) -delete || true

@@ -272,13 +272,13 @@ sub benchmark_blockchain
 	fatal("failed to open '%s' : %s", $full . '/topology.txt', $!);
     }
 
-    printf($fh "primary:%s:%s\n", $primary->id(), $primary->region());
+    printf($fh "primary:%s:%s:generic-type\n", $primary->id(), $primary->region());
     foreach $instance (@$diablo) {
-	printf($fh "secondary:%s:%s\n", $instance->id(),
+	printf($fh "secondary:%s:%s:generic-type\n", $instance->id(),
 	       $instance->region());
     }
     foreach $instance (@$chain) {
-	printf($fh "blockchain:%s:%s\n", $instance->id(),
+	printf($fh "blockchain:%s:%s:generic-type\n", $instance->id(),
 	       $instance->region());
     }
 

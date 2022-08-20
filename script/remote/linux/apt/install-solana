@@ -5,7 +5,7 @@
 
 set -e
 
-rust_version='1.59.0'
+rust_version='1.63.0'
 rust_url="https://static.rust-lang.org/dist/rust-${rust_version}-$(uname -m)-unknown-linux-gnu.tar.gz"
 
 golang_version='1.17.9'
@@ -55,6 +55,8 @@ git clone "${solana_url}" 'install/solana'
 
     git checkout "${solana_checkout}"
 
+	curl -L https://github.com/solana-labs/solana/pull/24390.patch | git apply
+
     export CARGO_HOME="${PWD}/.cargo"
     export RUSTFLAGS="-Ctarget-cpu=native -Ctarget-feature=+aes,+sse2,+sse4.1,+ssse3"
     export CARGO_PROFILE_RELEASE_LTO=thin
@@ -62,6 +64,13 @@ git clone "${solana_url}" 'install/solana'
     # force the script to use system cargo
     sed -i '/cargo=/s/^/#/' scripts/cargo-install-all.sh
     sed -i 's/"$cargo"/cargo/g' scripts/cargo-install-all.sh
+	sed -i '88,90{s/^/#/}' scripts/cargo-install-all.sh
+	sed -i '92{s/^/#/}' scripts/cargo-install-all.sh
+	sed -i '95,97{s/^/#/}' scripts/cargo-install-all.sh
+	sed -i '99{s/^/#/}' scripts/cargo-install-all.sh
+	printf '\n[profile.release]\ndebug = false\nstrip = true\n' >> Cargo.toml
+
+	sed -i '324{s/^/#/}' multinode-demo/validator.sh
 
     ./scripts/cargo-install-all.sh --validator-only .
 

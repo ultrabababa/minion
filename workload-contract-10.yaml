@@ -1,0 +1,6 @@
+# Constant contract 10 tps
+id: "contract-10"
+contract: "microsoft:buy"
+txs:
+    0: 10
+    30: 0

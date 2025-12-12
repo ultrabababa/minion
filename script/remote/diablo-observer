@@ -1,0 +1,139 @@
+#!/bin/bash
+
+set -e
+
+script_name='diablo-observer'
+deploy_root="${HOME}/deploy/diablo-observer"
+
+
+# setup_environment() {
+#     if [ ! -e "${install_root}" ] ; then
+# 	fatal "cannot find diablo-observer install at '${install_root}'"
+#     fi
+
+#     export PATH="${install_root}:${PATH}"
+
+#     # if ! command -v 'diablo' > '/dev/null' 2> '/dev/null' ; then
+# 	# fatal "cannot find diablo executable in '${install_root}'"
+#     # fi
+# }
+
+
+# Actions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+start() {
+	local dir pid config addr ip port blockchain script
+
+	if [ $# -gt 0 ] ; then
+	fatal "unexpected operand '$1'"
+	fi
+
+	dir="${deploy_root}"
+	if [ ! -d "${dir}" ] ; then
+	return 0
+    fi
+
+	addr="$(cat "${dir}/primary")"
+	ip="$(echo "${addr}" | cut -d':' -f1)"
+	port="$(echo "${addr}" | cut -d':' -f2)"
+    blockchain="$(cat "${dir}/blockchain")"
+    failures="$(cat "${dir}/failures")"
+    mode="$(cat "${dir}/mode")"
+    nodenum="$(cat "${dir}/nodenum")"
+	script="${dir}/${blockchain}"
+
+	for attempt in {1..60}
+	do
+		python3 "${deploy_root}/observer.py" "${ip}" "${port}" "${script}" "${failures}" "133" "${mode}" "${nodenum}" >> "${dir}/out" 2>> "${dir}/err" &
+		pid=$!
+
+		sleep 2
+
+		if [[ -z $pid ]] || ! kill -0 "$pid"; then
+			echo "############## observer exited, restarting ##############"
+			continue
+		else
+			echo ${pid} > "${dir}/pid"
+			break
+		fi
+	done
+
+    sleep 10
+}
+
+_kill() {
+	local sig="$1" ; shift
+	local dir pid dead
+
+	dir="${deploy_root}"
+
+    if [ ! -d "${dir}" ] ; then
+	return 0
+    elif [ ! -e "${dir}/pid" ] ; then
+	return 0
+    fi
+
+	pid="$(cat "${dir}/pid")"
+
+	if echo "${pid}" | grep -Pq '^\d+$' ; then
+		kill "${sig}" ${pid} 2> '/dev/null' || true
+	fi
+
+	dead=0
+	for i in $(seq 1 5) ; do
+		if ! ps ${pid} > '/dev/null' ; then
+		dead=1
+		break
+		fi
+
+		sleep 1
+	done
+
+	if [ ${dead} -eq 0 ] ; then
+		kill -KILL ${pid} 2> '/dev/null' || true
+	fi
+
+	rm "${dir}/pid"
+}
+
+stop() {
+	if [ $# -gt 0 ] ; then
+	fatal "unexpected operand '$1'"
+	fi
+
+	_kill -INT
+}
+
+nkill() {
+	if [ $# -gt 0 ] ; then
+	fatal "unexpected operand '$1'"
+	fi
+
+	_kill -KILL
+}
+
+
+# Main script - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# setup_environment
+
+if [ $# -lt 1 ] ; then
+	fatal "missing action operand"
+fi
+
+action="$1" ; shift
+
+case "${action}" in
+	'kill')
+	nkill "$@"
+	;;
+	'start')
+	start "$@"
+	;;
+	'stop')
+	stop "$@"
+	;;
+	*)
+	fatal "unknown action: '${action}'"
+	;;
+esac

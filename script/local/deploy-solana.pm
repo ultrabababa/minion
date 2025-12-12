@@ -63,6 +63,7 @@ sub get_nodes
 	die ("cannot open '$path' : $!");
     }
 
+	my $index = 0;
     while (defined($line = <$fh>)) {
 	chomp($line);
 	($ip, $number) = split(':', $line);
@@ -92,8 +93,10 @@ sub get_nodes
 
 	$nodes{$ip} = {
 	    'worker' => $assigned,
-	    'number' => $number
+	    'number' => $number,
+		'index' => $index
 	};
+	$index += 1;
     }
 
     close($fh);
@@ -120,12 +123,12 @@ sub build_nodefile
 	return undef;
     }
 
-    foreach $ip (sort { $a cmp $b } keys(%$nodes)) {
+    foreach $ip (sort { $nodes->{$a}->{'index'} <=> $nodes->{$b}->{'index'} } keys %$nodes) {
 	$number = $nodes->{$ip}->{'number'};
 
 	for ($i = 0; $i < $number; $i++) {
 	    printf($fh "%s:%d:%d:%d\n", $ip, $RPC_TCP_PORT + 2 * $i,
-		   $GOSSIP_TCP_PORT + $i, $DYNAMIC_TCP_PORT + 12 * $i);
+		   $GOSSIP_TCP_PORT + $i, $DYNAMIC_TCP_PORT + 15 * $i);
 	}
     }
 
@@ -136,13 +139,13 @@ sub build_nodefile
 
 sub generate_setup
 {
-    my ($nodes, $target) = @_;
+    my ($nodes, $target, $redundancy) = @_;
     my ($ifh, $ofh, $line, $ip, $i, $port, $worker, %groups, $tags);
 
-    foreach $ip (keys(%$nodes)) {
+	foreach $ip (sort { $nodes->{$a}->{'index'} <=> $nodes->{$b}->{'index'} } keys %$nodes) {
         for ($i = 0; $i < $nodes->{$ip}->{'number'}; $i++) {
             $line = sprintf("%s:%d", $ip, $RPC_TCP_PORT + 2 * $i);
-            $tags = $nodes->{$ip}->{'worker'}->region();
+            $tags = $nodes->{$ip}->{'worker'}->region() . sprintf("\n%d\nn%d", $RPC_TCP_PORT + 2 * $i, $nodes->{$ip}->{'index'});
             push(@{$groups{$tags}}, $line);
         }
     }
@@ -152,6 +155,9 @@ sub generate_setup
     }
 
     printf($ofh "interface: \"solana\"\n");
+    printf($ofh "\n");
+	printf($ofh "parameters:\n");
+	printf($ofh "  redundancy: %d\n", $redundancy);
     printf($ofh "\n");
     printf($ofh "endpoints:\n");
 
@@ -180,9 +186,9 @@ sub dispatch
     my ($index, $ip, $worker, $number, @paths, $i, $proc, @procs, @stats);
 
     $index = 0;
-    foreach $ip (sort { $a cmp $b } keys(%$nodes)) {
-	$worker = $nodes->{$ip}->{'worker'};
-	$number = $nodes->{$ip}->{'number'};
+    foreach my $node (sort { $a->{'index'} <=> $b->{'index'} } values %$nodes) {
+	$worker = $node->{'worker'};
+	$number = $node->{'number'};
 	@paths = ();
 
 	for ($i = 0; $i < $number; $i++) {
@@ -214,6 +220,16 @@ sub deploy_solana
     if (!(-f $ROLES_PATH)) {
 	return 1;
     }
+
+	my ($redundancy, @err) = @ARGV;
+
+	if (not defined $redundancy) {
+		die ("redundancy name not defined")
+	}
+
+	if (@err) {
+		die ("unexpected argument '" . shift(@err) . "'");
+	}
 
     # Get workers and number of nodes on each worker from role file.
     #
@@ -267,7 +283,7 @@ sub deploy_solana
     system('tar', '--directory=' . $ENV{MINION_PRIVATE}, '-xzf',
 	   $ENV{MINION_PRIVATE} . '/' . $NETWORK_NAME . '.tar.gz');
 
-    generate_setup($nodes, $DATA_DIR . '/setup.yaml');
+    generate_setup($nodes, $DATA_DIR . '/setup.yaml', $redundancy);
 
     dispatch($nodes, $NETWORK_PATH);
 

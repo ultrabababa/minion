@@ -33,11 +33,13 @@ setup_environment() {
 
     export PATH="${install_root}/bin:${PATH}"
 
-    if ! command -v 'solana-validator' > '/dev/null' 2> '/dev/null' ; then
-	fatal "cannot find solana-validator executable in '${install_root}'"
+    if ! command -v 'agave-validator' > '/dev/null' 2> '/dev/null' ; then
+	fatal "cannot find agave-validator executable in '${install_root}'"
     fi
 
-	export RUST_LOG=warn
+	export RUST_LOG="solana_metrics=warn,debug"
+	export RUST_BACKTRACE=full
+	# export RUST_LOG="info"
 }
 
 waitForNodeToInit() {
@@ -64,13 +66,14 @@ waitForNodeToInit() {
 # Actions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 start() {
-    local dir configdir pid rpcport gossipport dynamicport addr bootstrapaddr bootstrapgossipport
+    local dirs dir configdir pid rpcport gossipport dynamicport addr bootstrapaddr bootstrapgossipport status_code
 
+	dirs=("${deploy_root}/n"*)
     if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
+		dirs=("${@/#/${deploy_root}/n}")
     fi
 
-    for dir in "${deploy_root}/n"* ; do
+    for dir in "${dirs[@]}" ; do
 	if [ -d "${dir}" ] ; then
 		configdir="${dir}/config"
 	    rpcport="$(cat "${configdir}/rpcport")"
@@ -89,52 +92,128 @@ start() {
 		fatal "cannot find dynamic port in '${configdir}/dynamicport'"
 	    fi
 
-		if [ -d "${configdir}/bootstrap-validator" ] ; then
-		addr="$(cat "${configdir}/addr")"
-		"${dir}"/multinode-demo/bootstrap-validator.sh \
-		 --gossip-host ${addr} \
-		 --gossip-port ${gossipport} \
-		 --dynamic-port-range "${dynamicport}-$(( dynamicport + 12 ))" \
-		 --init-complete-file "${dir}/init-complete-node.log" \
-		 --wait-for-supermajority 1 \
-		 --allow-private-addr \
-		 --expected-bank-hash "$(cat "${configdir}/bank-hash")" \
-		 --enable-rpc-transaction-history \
-		 > "${dir}/out" 2> "${dir}/err" &
-		else
-		bootstrapaddr="$(cat "${configdir}/bootstrapaddr")"
-	    bootstrapgossipport="$(cat "${configdir}/bootstrapgossipport")"
+		for attempt in {1..10}
+		do
+			if [ -d "${configdir}/bootstrap-validator" ] ; then
+			addr="$(cat "${configdir}/addr")"
+			# "${dir}"/multinode-demo/bootstrap-validator.sh \
+			#  --gossip-host ${addr} \
+			#  --gossip-port ${gossipport} \
+			#  --dynamic-port-range "${dynamicport}-$(( dynamicport + 14 ))" \
+			#  --init-complete-file "${dir}/init-complete-node.log" \
+			#  --wait-for-supermajority 1 \
+			#  --expected-bank-hash "$(cat "${configdir}/bank-hash")" \
+			#  --enable-rpc-transaction-history \
+			#  --rpc-faucet-address 127.0.0.1:9900 \
+			# --no-duplicate-instance-check \
+			agave-validator \
+			--gossip-host ${addr} \
+			--gossip-port ${gossipport} \
+			--dynamic-port-range "${dynamicport}-$(( dynamicport + 14 ))" \
+			--init-complete-file "${dir}/init-complete-node.log" \
+			--wait-for-supermajority 1 \
+			--expected-bank-hash "$(cat "${configdir}/bank-hash")" \
+			--enable-rpc-transaction-history \
+			--require-tower \
+			--ledger "${configdir}/bootstrap-validator" \
+			--rpc-port ${rpcport} \
+			--snapshot-interval-slots 200 \
+			--no-incremental-snapshots \
+			--identity "${configdir}/bootstrap-validator/identity.json" \
+			--vote-account "${configdir}/bootstrap-validator/vote-account.json" \
+			--no-poh-speed-test \
+			--no-os-network-limits-test \
+			--no-wait-for-vote-to-start-leader \
+			--full-rpc-api \
+			--allow-private-addr \
+			--log - \
+			>> "${dir}/out" 2>> "${dir}/err" &
+			else
+			bootstrapaddr="$(cat "${configdir}/bootstrapaddr")"
+			bootstrapgossipport="$(cat "${configdir}/bootstrapgossipport")"
 
-		if ! echo "${bootstrapgossipport}" | grep -Pq '^\d+$' ; then
-		fatal "cannot find bootstrap gossip port in '${configdir}/bootstrapgossipport'"
-	    fi
+			if ! echo "${bootstrapgossipport}" | grep -Pq '^\d+$' ; then
+			fatal "cannot find bootstrap gossip port in '${configdir}/bootstrapgossipport'"
+			fi
 
-		export SKIP_ACCOUNTS_CREATION=1
-		"${dir}"/multinode-demo/validator.sh \
-		 --entrypoint "${bootstrapaddr}:${bootstrapgossipport}" \
-		 --gossip-port ${gossipport} \
-		 --rpc-port ${rpcport} \
-		 --dynamic-port-range "${dynamicport}-$(( dynamicport + 12 ))" \
-		 --expected-shred-version "$(cat "${configdir}/shred-version")" \
-		 --identity "${configdir}/identity.json" \
-		 --vote-account "${configdir}/vote-account.json" \
-		 --no-airdrop \
-		 --expected-bank-hash "$(cat "${configdir}/bank-hash")" \
-		 --init-complete-file "${dir}/init-complete-node.log" \
-		 --wait-for-supermajority 1 \
-		 --allow-private-addr \
-		 --enable-rpc-transaction-history \
-		 > "${dir}/out" 2> "${dir}/err" &
-		fi
-	    pid=$!
+			# export SKIP_ACCOUNTS_CREATION=1/
+			# "${dir}"/multinode-demo/validator.sh \
+			#  --entrypoint "${bootstrapaddr}:${bootstrapgossipport}" \
+			#  --gossip-port ${gossipport} \
+			#  --rpc-port ${rpcport} \
+			#  --dynamic-port-range "${dynamicport}-$(( dynamicport + 14 ))" \
+			#  --expected-shred-version "$(cat "${configdir}/shred-version")" \
+			#  --identity "${configdir}/identity.json" \
+			#  --vote-account "${configdir}/vote-account.json" \
+			#  --no-airdrop \
+			#  --expected-bank-hash "$(cat "${configdir}/bank-hash")" \
+			#  --init-complete-file "${dir}/init-complete-node.log" \
+			#  --wait-for-supermajority 1 \
+			#  --enable-rpc-transaction-history \
+			for gossip_attempt in {1..10}
+			do
+				solana-gossip \
+				--allow-private-addr \
+				rpc-url \
+				--timeout 180 \
+				--entrypoint "${bootstrapaddr}:${bootstrapgossipport}" || status_code=$?
 
-	    echo ${pid} > "${dir}/pid"
+				if [ -z "${status_code}" ]
+				then
+					break
+				else
+					sleep 5
+				fi
+			done
+
+
+
+			# --no-duplicate-instance-check \
+			agave-validator \
+			--max-genesis-archive-unpacked-size 1073741824 \
+			--no-poh-speed-test \
+			--no-os-network-limits-test \
+			--entrypoint "${bootstrapaddr}:${bootstrapgossipport}" \
+			--gossip-port ${gossipport} \
+			--rpc-port ${rpcport} \
+			--dynamic-port-range "${dynamicport}-$(( dynamicport + 14 ))" \
+			--expected-shred-version "$(cat "${configdir}/shred-version")" \
+			--identity "${configdir}/identity.json" \
+			--vote-account  "${configdir}/vote-account.json" \
+			--expected-bank-hash "$(cat "${configdir}/bank-hash")" \
+			--init-complete-file "${dir}/init-complete-node.log" \
+			--wait-for-supermajority 1 \
+			--enable-rpc-transaction-history \
+			--ledger "${configdir}/validator" \
+			--log - \
+			--full-rpc-api \
+			--no-incremental-snapshots \
+			--allow-private-addr \
+			--require-tower \
+			>> "${dir}/out" 2>> "${dir}/err" &
+			fi
+			pid=$!
+
+			if [ -d "${configdir}/bootstrap-validator" ] ; then
+				sleep 2
+			else
+				sleep 10
+			fi
+
+			if [[ -z $pid ]] || ! kill -0 "$pid"; then
+				echo "############## validator exited, restarting ##############"
+				continue
+			else
+				echo ${pid} > "${dir}/pid"
+				break
+			fi
+		done
 	fi
     done
 
-	for dir in "${deploy_root}/n"* ; do
+	for dir in "${dirs[@]}" ; do
 	if [ -d "${dir}" ] ; then
-		waitForNodeToInit "${dir}/init-complete-node.log" 120
+		waitForNodeToInit "${dir}/init-complete-node.log" 200
 	fi
 	done
 
@@ -143,19 +222,29 @@ start() {
 
 _kill() {
     local sig="$1" ; shift
-    local dir pid dead
+    local dirs dir pid dead configdir rpcport gossipport
 
-    for dir in "${deploy_root}/n"* ; do
+    dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+		dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
 	if [ ! -d "${dir}" ] ; then
 	    continue
 	elif [ ! -f "${dir}/pid" ] ; then
 	    continue
 	fi
 
+	# configdir="${dir}/config"
+	# rpcport="$(cat "${configdir}/rpcport")"
+	# gossipport="$(cat "${configdir}/gossipport")"
 	pid="$(cat "${dir}/pid")"
 
 	if echo "${pid}" | grep -Pq '^\d+$' ; then
-	    kill "${sig}" $(ps -o pid= --ppid ${pid}) 2> '/dev/null' || true
+	    kill "${sig}" ${pid} 2> '/dev/null' || true
+		# fuser -k "${sig}" "${rpcport}/tcp" 2> '/dev/null' || true
+		# fuser -k "${sig}" "${gossipport}/tcp" 2> '/dev/null' || true
 	fi
 
 	dead=0
@@ -169,27 +258,28 @@ _kill() {
 	done
 
 	if [ ${dead} -eq 0 ] ; then
-	    kill -KILL $(ps -o pid= --ppid ${pid}) 2> '/dev/null' || true
+	    kill -KILL ${pid} 2> '/dev/null' || true
 	fi
 
 	rm "${dir}/pid"
+	rm "${dir}/init-complete-node.log" 2> '/dev/null' || true
     done
 }
 
 stop() {
-    if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
-    fi
-
-    _kill -INT
+    _kill -INT "$@"
 }
 
 nkill() {
-    if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
-    fi
+    _kill -KILL "$@"
+}
 
-    _kill -KILL
+term() {
+	_kill -TERM "$@"
+}
+
+segv() {
+	_kill -SEGV "$@"
 }
 
 
@@ -212,6 +302,12 @@ case "${action}" in
 	;;
     'stop')
 	stop "$@"
+	;;
+    'term')
+	term "$@"
+	;;
+    'segv')
+	segv "$@"
 	;;
     *)
 	fatal "unknown action: '${action}'"

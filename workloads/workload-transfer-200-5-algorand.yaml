@@ -1,0 +1,94 @@
+let:
+  - &n { sample: !integer { from: 3, to: 3 } }
+
+  - !loop &a-1  { sample: !account { number: *n, stake: 1000000000 } }
+  - !loop &a-2  { sample: !account { number: *n, stake: 1000000000 } }
+  - !loop &a-3  { sample: !account { number: *n, stake: 1000000000 } }
+  - !loop &a-4  { sample: !account { number: *n, stake: 1000000000 } }
+  - !loop &a-5  { sample: !account { number: *n, stake: 1000000000 } }
+
+  - &l-1  { sample: !location [ "10\\.40\\.20\\.1$"  ] }
+  - &l-2  { sample: !location [ "10\\.40\\.20\\.2$"  ] }
+  - &l-3  { sample: !location [ "10\\.40\\.20\\.3$"  ] }
+  - &l-4  { sample: !location [ "10\\.40\\.20\\.4$"  ] }
+  - &l-5  { sample: !location [ "10\\.40\\.20\\.5$"  ] }
+  - &l-6  { sample: !location [ "10\\.40\\.20\\.6$"  ] }
+  - &l-7  { sample: !location [ "10\\.40\\.20\\.7$"  ] }
+  - &l-8  { sample: !location [ "10\\.40\\.20\\.8$"  ] }
+  - &l-9  { sample: !location [ "10\\.40\\.20\\.9$"  ] }
+  - &l-10 { sample: !location [ "10\\.40\\.20\\.10$" ] }
+  - &l-11 { sample: !location [ "10\\.40\\.21\\.1$"  ] }
+  - &l-12 { sample: !location [ "10\\.40\\.21\\.2$"  ] }
+  - &l-13 { sample: !location [ "10\\.40\\.21\\.3$"  ] }
+  - &l-14 { sample: !location [ "10\\.40\\.21\\.4$"  ] }
+  - &l-15 { sample: !location [ "10\\.40\\.21\\.5$"  ] }
+  - &l-16 { sample: !location [ "10\\.40\\.21\\.6$"  ] }
+  - &l-17 { sample: !location [ "10\\.40\\.21\\.7$"  ] }
+  - &l-18 { sample: !location [ "10\\.40\\.21\\.8$"  ] }
+  - &l-19 { sample: !location [ "10\\.40\\.21\\.9$"  ] }
+  - &l-20 { sample: !location [ "10\\.40\\.21\\.10$" ] }
+
+  - &e-1  { sample: !endpoint [ "10\\.40\\.10\\.1$"  ] }
+  - &e-2  { sample: !endpoint [ "10\\.40\\.10\\.2$"  ] }
+  - &e-3  { sample: !endpoint [ "10\\.40\\.10\\.3$"  ] }
+  - &e-4  { sample: !endpoint [ "10\\.40\\.10\\.4$"  ] }
+  - &e-5  { sample: !endpoint [ "10\\.40\\.10\\.5$"  ] }
+  - &e-6  { sample: !endpoint [ "10\\.40\\.10\\.6$"  ] }
+  - &e-7  { sample: !endpoint [ "10\\.40\\.10\\.7$"  ] }
+  - &e-8  { sample: !endpoint [ "10\\.40\\.10\\.8$"  ] }
+  - &e-9  { sample: !endpoint [ "10\\.40\\.10\\.9$"  ] }
+  - &e-10 { sample: !endpoint [ "10\\.40\\.10\\.10$" ] }
+  - &e-11 { sample: !endpoint [ "10\\.40\\.11\\.1$"  ] }
+  - &e-12 { sample: !endpoint [ "10\\.40\\.11\\.2$"  ] }
+  - &e-13 { sample: !endpoint [ "10\\.40\\.11\\.3$"  ] }
+  - &e-14 { sample: !endpoint [ "10\\.40\\.11\\.4$"  ] }
+  - &e-15 { sample: !endpoint [ "10\\.40\\.11\\.5$"  ] }
+  - &e-16 { sample: !endpoint [ "10\\.40\\.11\\.6$"  ] }
+  - &e-17 { sample: !endpoint [ "10\\.40\\.11\\.7$"  ] }
+  - &e-18 { sample: !endpoint [ "10\\.40\\.11\\.8$"  ] }
+  - &e-19 { sample: !endpoint [ "10\\.40\\.11\\.9$"  ] }
+  - &e-20 { sample: !endpoint [ "10\\.40\\.11\\.10$" ] }
+
+  - &d   { sample: !integer { from: 800, to: 800     } }
+  - &tps { sample: !float   { from: 40.00, to: 40.01 } }
+
+workloads:
+  - number: 1
+    client:
+      location: *l-1
+      view: *e-1
+      behavior:
+        - interaction: !transfer { from: *a-1, to: *a-1 }
+          load: { 0: *tps, *d: 0 }
+
+  - number: 1
+    client:
+      location: *l-2
+      view: *e-2
+      behavior:
+        - interaction: !transfer { from: *a-2, to: *a-2 }
+          load: { 0: *tps, *d: 0 }
+
+  - number: 1
+    client:
+      location: *l-3
+      view: *e-3
+      behavior:
+        - interaction: !transfer { from: *a-3, to: *a-3 }
+          load: { 0: *tps, *d: 0 }
+
+  - number: 1
+    client:
+      location: *l-4
+      view: *e-4
+      behavior:
+        - interaction: !transfer { from: *a-4, to: *a-4 }
+          load: { 0: *tps, *d: 0 }
+
+  - number: 1
+    client:
+      location: *l-5
+      view: *e-5
+      behavior:
+        - interaction: !transfer { from: *a-5, to: *a-5 }
+          load: { 0: *tps, *d: 0 }

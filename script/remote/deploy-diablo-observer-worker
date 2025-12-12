@@ -1,0 +1,72 @@
+#!/bin/bash
+#
+#   deploy-diablo-observer-worker - deploy diablo observer on a worker node
+#
+#   Assume diablo is installed on the current environment under the path
+#   "$HOME/install/diablo" and setup anything necessary under the path
+#   "$HOME/deploy/diablo" to be ready to run.
+#
+#   The current environment can be configured to run as a diablo primary node
+#   or secondary node.
+#
+
+set -e
+
+script_name='deploy-diablo-observer-worker'
+deploy_root="${HOME}/deploy/diablo-observer"
+
+
+# Utility functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+fatal() {
+    local msg="$1" ; shift
+
+    exec >&2
+
+    echo "${script_name}: ${msg}"
+    echo
+    echo "Usage: $0  <addr:port> <blockchain> <failures> <mode>"
+    echo
+
+    exit 1
+}
+
+
+# Prepare deployment  - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+prepare() {
+    if [ ! -d "${deploy_root}" ] ; then
+	mkdir -p "${deploy_root}"
+    fi
+}
+
+
+# Main script - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+if [ $# -lt 1 ] ; then
+    fatal "missing primary addr:port operand"
+elif [ $# -lt 2 ] ; then
+    fatal "missing blockchain operand"
+elif [ $# -lt 3 ] ; then
+    fatal "missing failures operand"
+elif [ $# -lt 4 ] ; then
+    fatal "missing mode operand"
+elif [ $# -lt 5 ] ; then
+    fatal "missing nodenum operand"
+elif [ $# -gt 5 ] ; then
+    fatal "unexpected operand '$5'"
+fi
+
+primary="$1" ; shift
+blockchain="$1" ; shift
+failures="$1" ; shift
+mode="$1" ; shift
+nodenum="$1" ; shift
+
+prepare
+
+echo "${primary}" > "${deploy_root}/primary"
+echo "${blockchain}" > "${deploy_root}/blockchain"
+echo "${failures}" > "${deploy_root}/failures"
+echo "${mode}" > "${deploy_root}/mode"
+echo "${nodenum}" > "${deploy_root}/nodenum"

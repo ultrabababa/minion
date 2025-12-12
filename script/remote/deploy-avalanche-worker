@@ -3,7 +3,7 @@
 set -e
 
 script_name='deploy-avalanche-worker'
-install_root="${HOME}/install/avalanche"
+install_root="${HOME}/install/avalanche-tools"
 deploy_root="${HOME}/deploy/avalanche"
 
 
@@ -29,10 +29,10 @@ fatal() {
 
 setup_environment() {
     if [ ! -e "${install_root}" ] ; then
-	fatal "cannot find avalanche install at '${install_root}'"
+	fatal "cannot find avalanche-tools install at '${install_root}'"
     fi
 
-    export PATH="${install_root}/avalanche-tools:${PATH}"
+    export PATH="${install_root}:${PATH}"
 
     if ! command -v 'avalanche' > '/dev/null' 2> '/dev/null' ; then
 	fatal "cannot find avalanche executable in '${install_root}'"

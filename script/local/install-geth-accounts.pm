@@ -36,8 +36,8 @@ if (@err) {
     die ("unexpected argument '" . shift(@err) . "'");
 }
 
-if (defined($from) && !(-d $from)) {
-    die ("cannot find account directory '$from'");
+if (defined($from) && !(-e $from)) {
+    die ("cannot find account file '$from'");
 }
 
 
@@ -127,6 +127,7 @@ sub import_accounts
 
 	$count = 0;
 	while (defined($line = <$fh>)) {
+		$count++;
 	    if ($count == $number) {
 		last;
 	    }
@@ -143,11 +144,11 @@ sub import_accounts
     generate_yaml_accounts($from, $KEYS_YAML_PATH);
     generate_json_accounts($from, $KEYS_JSON_PATH);
 
-    $FLEET->execute([ 'mkdir', 'install' ], STDERRS => '/dev/null')->wait();
+    $FLEET->execute([ 'mkdir', 'install' ], STDERRS => '/dev/null')->waitall();
     $FLEET->execute(
 	[ 'rm', '-rf', 'install/geth-accounts' ],
 	STDERRS => '/dev/null'
-	)->wait();
+	)->waitall();
 
     $pgrp = $FLEET->execute([ 'mkdir', 'install/geth-accounts' ]);
     if (grep { $_->exitstatus() != 0 } $pgrp->waitall()) {

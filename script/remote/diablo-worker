@@ -61,13 +61,15 @@ setup_environment() {
 	if [ -d "${move_root}" ] ; then
 	export PATH="${move_root}/target/release:${PATH}"
 	fi
+
+	export TRACE="true"
 }
 
 
 # Primary node  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 start_primary() {
-    local dir pid port nsecondary
+    local dir pid port nsecondary nobserver
 
     dir="${deploy_root}/primary"
 
@@ -77,6 +79,7 @@ start_primary() {
 
     port="$(cat "${dir}/port")"
     nsecondary="$(cat "${dir}/nsecondary")"
+    nobserver="$(cat "${dir}/nobserver")"
 
     if ! echo "${port}" | grep -Pq '^\d+$' ; then
 	fatal "cannot start diablo primary with port '${port}'"
@@ -90,9 +93,9 @@ start_primary() {
     # 	> "${dir}/out" \
     # 	2> "${dir}/err" &
     set -x
-	# ulimit -n 65535
+	ulimit -n 65535
     diablo primary \
-	   -v \
+	   -vvv \
 	   --env="accounts=${dir}/accounts.yaml" \
 	   --env="contracts=${install_root}/move-contracts" \
 	   --env="contracts=${install_root}/teal-contracts" \
@@ -100,6 +103,7 @@ start_primary() {
 	   --port=${port} \
 	   --output="${dir}/results.json" \
 	   --compress --stat \
+	   --observers ${nobserver} \
 	   ${nsecondary} "${dir}/setup.yaml" "${deploy_root}/workload.yaml" \
 	   > "${dir}/out" 2> "${dir}/err" &
     pid=$!
@@ -192,18 +196,29 @@ start_secondary() {
 	#        --level='DEBUG' \
 	#        > "${dir}/out" \
 	#        2> "${dir}/err" &
-	set -x
-	# ulimit -n 65535
-	diablo secondary \
-	       -v \
-	       --tag="${region}" \
-	       --port=${port} \
-	       ${ip} \
-	       > "${dir}/out" 2> "${dir}/err" &
-	pid=$!
-	set +x
+	for attempt in {1..60}
+	do
+		set -x
+		ulimit -n 65535
+		diablo secondary \
+				-vvv \
+				--tag="${region}" \
+				--port=${port} \
+				${ip} \
+				>> "${dir}/out" 2>> "${dir}/err" &
+		pid=$!
+		set +x
 
-	echo ${pid} > "${dir}/pid"
+		sleep 2
+
+		if [[ -z $pid ]] || ! kill -0 "$pid"; then
+			echo "############## secondary exited, restarting ##############"
+			continue
+		else
+			echo ${pid} > "${dir}/pid"
+			break
+		fi
+	done
     done
 }
 

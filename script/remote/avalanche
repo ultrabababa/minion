@@ -62,13 +62,17 @@ waitForNodeToInit() {
 # Actions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 start() {
-    local dir pid config
+    local dir pid config dirs cchainconfig chainconfig
 
+	cchainconfig="$(echo -n '{"log-level":"debug"}' | base64)"
+	chainconfig="$(echo -n "{\"C\":{\"Config\":\"${cchainconfig}\",\"Upgrade\":null}}" | base64)"
+
+    dirs=("${deploy_root}/n"*)
     if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
+		dirs=("${@/#/${deploy_root}/n}")
     fi
 
-    for dir in "${deploy_root}/n"* ; do
+    for dir in "${dirs[@]}" ; do
 	if [ -d "${dir}" ] ; then
 	    config="${dir}/.avalanchego/config.json"
 
@@ -76,17 +80,23 @@ start() {
         fatal "cannot find avalanche config.json at '${config}'"
         fi
 
+		#  --log-level debug \
+		#  --system-tracker-frequency 24h \
+		#  --network-inbound-connection-throttling-cooldown 0 \
+		#  --throttler-inbound-node-max-processing-msgs 10240 \
+		#  --throttler-inbound-bandwidth-refill-rate 10240 \
+		#  --chain-config-content "${chainconfig}" \
 	    HOME="${dir}" avalanchego --config-file "${config}" \
-		 > "${dir}/out" 2> "${dir}/err" &
+		 >> "${dir}/out" 2>> "${dir}/err" &
 	    pid=$!
 
 	    echo ${pid} > "${dir}/pid"
 	fi
     done
 
-    for dir in "${deploy_root}/n"* ; do
+    for dir in "${dirs[@]}" ; do
 	if [ -d "${dir}" ] ; then
-		waitForNodeToInit "$(grep -oP '(?<="http-port":)[^,]*' ${dir}/.avalanchego/config.json)" 120
+		waitForNodeToInit "$(grep -oP '(?<="http-port":)[^,]*' ${dir}/.avalanchego/config.json)" 600
 	fi
 	done
 
@@ -95,9 +105,14 @@ start() {
 
 _kill() {
     local sig="$1" ; shift
-    local dir pid dead
+    local dir pid dead dirs
 
-    for dir in "${deploy_root}/n"* ; do
+	dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+		dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
 	if [ ! -d "${dir}" ] ; then
 	    continue
 	elif [ ! -f "${dir}/pid" ] ; then
@@ -129,19 +144,15 @@ _kill() {
 }
 
 stop() {
-    if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
-    fi
-
-    _kill -INT
+    _kill -INT "$@"
 }
 
 nkill() {
-    if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
-    fi
+    _kill -KILL "$@"
+}
 
-    _kill -KILL
+term() {
+    _kill -TERM "$@"
 }
 
 
@@ -164,6 +175,9 @@ case "${action}" in
 	;;
     'stop')
 	stop "$@"
+	;;
+    'term')
+	term "$@"
 	;;
     *)
 	fatal "unknown action: '${action}'"

@@ -9,6 +9,7 @@ use Scalar::Util qw(blessed);
 
 use Minion::Io::Util qw(output_function);
 use Minion::System::Process;
+use Minion::System::WrapperFuture;
 use Minion::Worker;
 
 
@@ -21,6 +22,7 @@ sub _init
     confess() if (ref($addr) ne '');
 
     $self->{__PACKAGE__()}->{_host} = $addr;
+    $self->{__PACKAGE__()}->{_cache} = {};
 
     if (defined($value = $opts{ALIASES})) {
 	confess() if (ref($value) ne 'HASH');
@@ -109,22 +111,19 @@ sub host
     return $self->{__PACKAGE__()}->{_host};
 }
 
-sub public_ip
-{
-    my ($self, @err) = @_;
-
-    confess() if (@err);
-
-    return $self->{__PACKAGE__()}->{_host};
-}
-
 sub region
 {
     my ($self, @err) = @_;
 
     confess() if (@err);
 
-    return "generic-region";
+    my $id = '';
+    my $ip = $self->public_ip();
+    if ($ip =~ m|^(\d+)\.(\d+)\.(\d+)\.(\d+)$|) {
+    $id = $1 . "." . $2 . "." . $3 . "." . $4;
+    }
+
+    return "${id}";
 }
 
 sub id
@@ -243,6 +242,43 @@ sub execute
 
 	exit (1);
     }, %popts);
+}
+
+sub update
+{
+    my ($self, @err) = @_;
+
+    confess() if (@err);
+
+    my $out = '';
+    my $ret = $self->execute([ 'ip', '-4', '-o', 'a', 'show', 'eth2' ], STDOUT => \$out)->wait();
+	if ($out =~ m!inet (.*)/!) {
+        $self->{__PACKAGE__()}->{_cache}->{_public_ip} = $1;
+    }
+}
+
+sub _get_cached
+{
+    my ($self, $name, @err) = @_;
+    my ($ret);
+
+    confess() if (@err);
+
+    $ret = $self->{__PACKAGE__()}->{_cache}->{$name};
+
+    if (!defined($ret)) {
+	$self->update();
+	$ret = $self->{__PACKAGE__()}->{_cache}->{$name};
+    }
+
+    return $ret;
+}
+
+sub public_ip
+{
+    my ($self, @args) = @_;
+
+    return $self->_get_cached('_public_ip', @args);
 }
 
 sub send

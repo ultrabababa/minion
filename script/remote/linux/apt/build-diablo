@@ -1,0 +1,51 @@
+#!/bin/bash
+#
+#   install-diablo - install diablo
+#
+
+set -e
+
+# Create an install dir if not already there.
+#
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
+
+if [ -e 'install/diablo' ] ; then
+    sudo rm -rf 'install/diablo'
+fi
+
+if [ ! -f "$HOME/helper" ]; then
+    echo "Cannot find helper script" >&2
+    exit 1
+fi
+. "$HOME/helper"
+
+golang_version='1.22.2'
+
+diablo_url="https://github.com/lebdron/diablo-benchmark.git"
+diablo_checkout='e42cd0f5925e7d4c665c51effb1b60a3ec68021b'
+
+# Install common utilities.
+#
+asdf_install golang "$golang_version"
+
+# Clone Diablo from the official repository and build it.
+#
+mkdir 'install/diablo'
+(
+    cd 'install/diablo'
+
+    git init
+	git remote add origin "${diablo_url}"
+	git fetch --depth 1 origin "${diablo_checkout}"
+	git checkout FETCH_HEAD
+
+    go mod tidy
+
+    go build -o diablo
+
+    tar czfv '../diablo.tar.gz' --transform 's,^,diablo/,' 'diablo' 'move-contracts' 'solidity-contracts' 'teal-contracts'
+)
+
+# go clean -cache

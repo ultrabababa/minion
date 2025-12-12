@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+#   install-aptos - install the Aptos blockchain from its repository
+#
+
+set -e
+
+# Create an install dir if not already there.
+#
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
+
+if [ -e 'install/aptos' ] ; then
+    sudo rm -rf 'install/aptos'
+fi
+
+rust_version='1.72.1'
+sccache_version='0.7.6'
+
+aptos_url='https://github.com/aptos-labs/aptos-core.git'
+aptos_checkout='60f7f5ad5bdbf810f7844625d46d073da8d5ddb5' # aptos-node-v1.9.3
+
+if [ ! -f "$HOME/helper" ]; then
+    echo "Cannot find helper script" >&2
+    exit 1
+fi
+. "$HOME/helper"
+
+# Install common utilities.
+#
+export RUST_WITHOUT=rust-docs
+asdf_install rust "${rust_version}"
+asdf_install sccache "${sccache_version}"
+# cargo install cargo-cache
+
+sudo -n apt-get install -yy clang llvm libssl-dev pkg-config cmake lld libudev-dev libdw-dev
+
+# Clone Aptos from the official repository and build it.
+#
+mkdir 'install/aptos'
+(
+    cd 'install/aptos'
+
+    git init
+	git remote add origin "${aptos_url}"
+	git fetch --depth 1 origin "${aptos_checkout}"
+	git checkout FETCH_HEAD
+
+    export RUSTFLAGS="-Ctarget-cpu=native -Cstrip=symbols -Cdebuginfo=0 --cfg tokio_unstable -Clink-arg=-fuse-ld=lld -Ctarget-feature=+sse4.2"
+    export RUSTC_WRAPPER="sccache"
+
+    cargo build --locked --release -p aptos-node
+    cargo build --locked --release -p aptos
+
+    tar czfv '../aptos.tar.gz' --transform 's,^,aptos/,' 'target/release/aptos' 'target/release/aptos-node' aptos-move/framework/aptos* aptos-move/framework/move*
+)

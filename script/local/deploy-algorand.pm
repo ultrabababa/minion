@@ -49,6 +49,7 @@ sub get_nodes
 	die ("cannot open '$path' : $!");
     }
 
+	my $index = 0;
     while (defined($line = <$fh>)) {
 	chomp($line);
 	($ip, $number) = split(':', $line);
@@ -78,61 +79,15 @@ sub get_nodes
 
 	$nodes{$ip} = {
 	    'worker' => $assigned,
-	    'number' => $number
+	    'number' => $number,
+		'index' => $index
 	};
+	$index += 1;
     }
 
     close($fh);
 
     return \%nodes;
-}
-
-# Return the sorted IPs of Algorand full or client nodes from the actors as
-# returned by `get_actors()` and a role.
-# If an actor has an instance number greater than 1 then its IP is repeated as
-# many times.
-#
-# Return: [ $ip , ... ]
-#
-sub get_actors_ip_instances
-{
-    my ($actors, $role) = @_;
-    my (@ips, $ip, $actor, $number, $i);
-
-    while (($ip, $actor) = each(%{$actors->{$role}})) {
-	$number = $actor->[1];
-	for ($i = 0; $i < $number; $i++) {
-	    push(@ips, $ip);
-	}
-    }
-
-    return [ sort { $a cmp $b } @ips ];
-}
-
-# Return the workers of Algorand full or client nodes from the actors as
-# returned by `get_actors()` and a role.
-# If an actor has an instance number greater than 1 then the corresponding
-# worker is repeated as many times.
-# The workers appear sorted by their IP.
-#
-# Return: [ $worker , ... ]
-#
-sub get_actors_worker_instances
-{
-    my ($actors, $role) = @_;
-    my (@workers, $ip, $actor, $worker, $number, $i);
-
-    foreach $ip (sort { $a cmp $b } keys(%{$actors->{$role}})) {
-	$actor = $actors->{$role}->{$ip};
-	$worker = $actor->[0];
-	$number = $actor->[1];
-
-	for ($i = 0; $i < $number; $i++) {
-	    push(@workers, $worker);
-	}
-    }
-
-    return \@workers;
 }
 
 sub build_network_template
@@ -155,6 +110,8 @@ sub build_network_template
 {
     "Genesis": {
 	"NetworkName": "PrivateNet",
+	"FirstPartKeyRound": 0,
+	"LastPartKeyRound": 50000,
 	"Wallets": [
 EOF
 
@@ -222,7 +179,7 @@ sub build_nodefile
 	die ("cannot create algorand nodefile '$path' : $!");
     }
 
-    foreach $ip (keys(%$nodes)) {
+    foreach $ip (sort { $nodes->{$a}->{'index'} <=> $nodes->{$b}->{'index'} } keys %$nodes) {
 	for ($i = 0; $i < $nodes->{$ip}->{'number'}; $i++) {
 	    printf($fh "%s:%d:%d\n", $ip, $PEER_TCP_PORT + $i,
 		   $CLIENT_TCP_PORT + $i);
@@ -235,18 +192,18 @@ sub build_nodefile
 sub dispatch
 {
     my ($nodes, $network) = @_;
-    my ($ip, $i, $done, @paths, @procs, $proc, @statuses);
+    my ($i, $done, @paths, @procs, $proc, @statuses);
 
     $done = 0;
 
-    foreach $ip (keys(%$nodes)) {
+    foreach my $node (sort { $a->{'index'} <=> $b->{'index'} } values %$nodes) {
 	@paths = ();
 
-	for ($i = 0; $i < $nodes->{$ip}->{'number'}; $i++) {
+	for ($i = 0; $i < $node->{'number'}; $i++) {
 	    push(@paths, $NETWORK_PATH . '/n' . ($done + scalar(@paths)));
 	}
 
-	$proc = $nodes->{$ip}->{'worker'}->send(
+	$proc = $node->{'worker'}->send(
 	    [ @paths ],
 	    TARGET => 'deploy/algorand/'
 	    );
@@ -264,13 +221,13 @@ sub dispatch
 
 sub generate_setup
 {
-    my ($nodes, $target) = @_;
+    my ($nodes, $target, $redundancy) = @_;
     my ($ifh, $ofh, $line, $ip, $i, $port, $worker, %groups, $tags);
 
-	foreach $ip (keys(%$nodes)) {
+	foreach $ip (sort { $nodes->{$a}->{'index'} <=> $nodes->{$b}->{'index'} } keys %$nodes) {
 	for ($i = 0; $i < $nodes->{$ip}->{'number'}; $i++) {
 		$line = sprintf("%s:%d", $ip, $CLIENT_TCP_PORT + $i);
-		$tags = $nodes->{$ip}->{'worker'}->region();
+		$tags = $nodes->{$ip}->{'worker'}->region() . sprintf("\n%d\nn%d", $CLIENT_TCP_PORT + $i, $nodes->{$ip}->{'index'});
 		push(@{$groups{$tags}}, $line);
 	}
     }
@@ -283,6 +240,7 @@ sub generate_setup
     printf($ofh "\n");
     printf($ofh "parameters:\n");
 	printf($ofh "  confirm: \"pollblk\"\n");
+	printf($ofh "  redundancy: %d\n", $redundancy);
 	printf($ofh "\n");
     printf($ofh "endpoints:\n");
 
@@ -311,6 +269,16 @@ sub deploy_algorand
     if (!(-e $NODE_LIST_PATH)) {
 	return 1;
     }
+
+	my ($redundancy, @err) = @ARGV;
+
+	if (not defined $redundancy) {
+		die ("redundancy name not defined")
+	}
+
+	if (@err) {
+		die ("unexpected argument '" . shift(@err) . "'");
+	}
 
     $nodes = get_nodes($NODE_LIST_PATH);
 
@@ -385,7 +353,7 @@ sub deploy_algorand
     system('tar', '--directory=' . $ENV{MINION_PRIVATE}, '-xzf',
 	   $ENV{MINION_PRIVATE} . '/' . $NETWORK_NAME . '.tar.gz');
 
-	generate_setup($nodes, $ALGORAND_PATH . '/setup.yaml');
+	generate_setup($nodes, $ALGORAND_PATH . '/setup.yaml', $redundancy);
 
     dispatch($nodes, $NETWORK_PATH);
 

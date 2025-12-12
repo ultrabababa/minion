@@ -1,0 +1,47 @@
+#!/bin/bash
+#
+#   build-avalanche-tools - install the Avalanche tools from the repository
+#
+
+set -e
+
+# Create an install dir if not already there.
+#
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
+
+if [ -e 'install/avalanche-tools' ] ; then
+    sudo rm -rf 'install/avalanche-tools'
+fi
+
+golang_version='1.20.10'
+
+avalanche_tools_url='https://github.com/lebdron/avalanche-tools.git'
+avalanche_tools_checkout='a293fe99c27b5b26ba1ad31597363acac027a69e'
+
+if [ ! -f "$HOME/helper" ]; then
+    echo "Cannot find helper script" >&2
+    exit 1
+fi
+. "$HOME/helper"
+
+# Install common utilities.
+#
+asdf_install golang "$golang_version"
+
+# Clone avalanche-tools and build it.
+#
+mkdir 'install/avalanche-tools'
+(
+    cd 'install/avalanche-tools'
+
+    git init
+	git remote add origin "${avalanche_tools_url}"
+	git fetch --depth 1 origin "${avalanche_tools_checkout}"
+	git checkout FETCH_HEAD
+
+    CGO_CFLAGS="-O -D__BLST_PORTABLE__" go build -o avalanche
+
+	tar czfv '../avalanche-tools.tar.gz' --transform 's,^,avalanche-tools/,' 'avalanche'
+)

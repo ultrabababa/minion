@@ -112,6 +112,10 @@ set_goal_network_address() {
 	#
 	sed -ri 's/\{/\{\n\t"ConnectionsRateLimitingWindowSeconds": 0,/' \
 	    "${netroot}/n$(( i - 1 ))/config.json"
+    sed -ri 's/\{/\{\n\t"RestConnectionsSoftLimit": 20480,/' \
+	    "${netroot}/n$(( i - 1 ))/config.json"
+    sed -ri 's/\{/\{\n\t"RestConnectionsHardLimit": 20480,/' \
+	    "${netroot}/n$(( i - 1 ))/config.json"
 
 	# Set correct port to use as blockchain endpoint (for clients).
 	#
@@ -121,6 +125,8 @@ set_goal_network_address() {
 	# Enable deployment of smart contracts.
 	#
 	sed -ri 's/\{/\{\n\t"EnableDeveloperAPI": true,/' \
+	    "${netroot}/n$(( i - 1 ))/config.json"
+    sed -ri 's/\{/\{\n\t"BaseLoggerDebugLevel": 5,/' \
 	    "${netroot}/n$(( i - 1 ))/config.json"
     done
 }

@@ -8,6 +8,12 @@ my $FLEET = $_;
 my %PARAMS = @_;
 my $RUNNER = $PARAMS{RUNNER};
 
+my ($redundancy, @err) = @ARGV;
+
+if (@err) {
+    die ("unexpected argument '" . shift(@err) . "'");
+}
+
 
 # Remove the previous deployment directory to start from a clean one.
 #
@@ -18,31 +24,23 @@ $FLEET->execute(['rm', '-rf', 'deploy'], STDERRS => '/dev/null')->waitall();
 # Do nothing if not enabled.
 #
 
-if ($RUNNER->run($FLEET, [ 'deploy-algorand' ])->wait() != 0) {
+if ($RUNNER->run($FLEET, [ 'deploy-algorand', $redundancy ])->wait() != 0) {
     die ("failed to deploy algorand");
 }
 
-if ($RUNNER->run($FLEET, [ 'deploy-diem' ])->wait() != 0) {
-    die ("failed to deploy diem");
+if ($RUNNER->run($FLEET, [ 'deploy-aptos', $redundancy ])->wait() != 0) {
+    die ("failed to deploy algorand");
 }
 
-if ($RUNNER->run($FLEET, [ 'deploy-poa' ])->wait() != 0) {
-    die ("failed to deploy poa");
-}
-
-if ($RUNNER->run($FLEET, [ 'deploy-quorum-ibft' ])->wait() != 0) {
-    die ("failed to deploy quorum-ibft");
-}
-
-if ($RUNNER->run($FLEET, [ 'deploy-quorum-raft' ])->wait() != 0) {
-    die ("failed to deploy quorum-raft");
-}
-
-if ($RUNNER->run($FLEET, [ 'deploy-solana' ])->wait() != 0) {
+if ($RUNNER->run($FLEET, [ 'deploy-solana', $redundancy ])->wait() != 0) {
     die ("failed to deploy solana");
 }
 
-if ($RUNNER->run($FLEET, [ 'deploy-avalanche' ])->wait() != 0) {
+if ($RUNNER->run($FLEET, [ 'deploy-avalanche', $redundancy ])->wait() != 0) {
+    die ("failed to deploy avalanche");
+}
+
+if ($RUNNER->run($FLEET, [ 'deploy-sevm', $redundancy ])->wait() != 0) {
     die ("failed to deploy avalanche");
 }
 

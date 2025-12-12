@@ -1,0 +1,208 @@
+#!/bin/bash
+
+set -e
+
+script_name='sevm'
+install_root="${HOME}/install/sevm"
+deploy_root="${HOME}/deploy/sevm"
+
+
+# Utility functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+fatal() {
+	local msg="$1" ; shift
+
+	exec >&2
+
+	echo "${script_name}: ${msg}"
+	echo
+	echo "Usage: $0 start (1)"
+	echo "       $0 stop (2)"
+	echo "       $0 kill (3)"
+	echo
+	echo "Either start (1), gracefully stop (2) or kill (3) the nodes deployed"
+	echo "on this worker"
+
+	exit 1
+}
+
+setup_environment() {
+	if [ ! -e "${install_root}" ] ; then
+	fatal "cannot find sevm install at '${install_root}'"
+	fi
+
+	export PATH="${install_root}/build:${PATH}"
+
+	if ! command -v 'sevm' > '/dev/null' 2> '/dev/null' ; then
+	fatal "cannot find sevm executable in '${install_root}'"
+	fi
+}
+
+waitForNodeToInit() {
+	local port="$1" ; shift
+    local waitTime="$1" ; shift
+
+	echo "--- waiting for $port"
+	declare startTime=$SECONDS
+	while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:$port)" != "200" ]]; do
+	declare timeWaited=$((SECONDS - startTime))
+	if [[ $timeWaited -ge $waitTime ]]; then
+		echo "^^^ +++"
+		echo "Error: $port not ready in $timeWaited seconds"
+		nkill
+		exit 1
+	fi
+	echo "Waiting for $port ($timeWaited)..."
+	sleep 5
+	done
+	echo "$port ready"
+}
+
+
+# Actions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+start() {
+	local dirs dir pid httpport wsport grpcport consensusport nodeid
+
+	dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+		dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
+	if [ -d "${dir}" ] ; then
+		httpport="$(cat "${dir}/httpport")"
+		wsport="$(cat "${dir}/wsport")"
+		grpcport="$(cat "${dir}/grpcport")"
+		consensusport="$(cat "${dir}/consensusport")"
+		nodeid="$(cat "${dir}/nodeid")"
+
+		if ! echo "${httpport}" | grep -Pq '^\d+$' ; then
+		fatal "cannot find httpport in '${dir}/httpport'"
+	    fi
+		if ! echo "${wsport}" | grep -Pq '^\d+$' ; then
+		fatal "cannot find wsport in '${dir}/wsport'"
+	    fi
+		if ! echo "${grpcport}" | grep -Pq '^\d+$' ; then
+		fatal "cannot find grpcport in '${dir}/grpcport'"
+	    fi
+		if ! echo "${consensusport}" | grep -Pq '^\d+$' ; then
+		fatal "cannot find consensusport in '${dir}/consensusport'"
+	    fi
+		if ! echo "${nodeid}" | grep -Pq '^\d+$' ; then
+		fatal "cannot find nodeid in '${dir}/nodeid'"
+	    fi
+
+		for attempt in {1..10}
+		do
+			ulimit -n 65535
+			sevm run --datadir "${dir}/data" \
+			 --lvl debug \
+			 --consensus.type dbft \
+			 --downloader.port="${grpcport}" \
+			 --dbft.port="${consensusport}" \
+			 --dbft.datadir="${dir}/data" \
+			 --signing.file "${dir}/signingkey" \
+			 --nodeId "${nodeid}" \
+			 --txpool.globalqueue 32768 \
+			 --http --http.addr=0.0.0.0 --http.corsdomain="*" --http.vhosts="*" --http.port="${httpport}" --http.api eth,net,web3,personal,admin \
+			 --ws --ws.addr=0.0.0.0 --ws.port="${wsport}" --ws.origins="*" --ws.api eth,net,web3,personal,admin \
+				>> "${dir}/out" 2>> "${dir}/err" &
+			pid=$!
+
+			sleep 2
+
+			if [[ -z $pid ]] || ! kill -0 "$pid"; then
+				echo "############## validator exited, restarting ##############"
+				continue
+			else
+				echo ${pid} > "${dir}/pid"
+				break
+			fi
+		done
+	fi
+	done
+
+	for dir in "${dirs[@]}" ; do
+	if [ -d "${dir}" ] ; then
+		httpport="$(cat "${dir}/httpport")"
+		waitForNodeToInit "${httpport}" 600
+	fi
+	done
+
+	sleep 2
+}
+
+_kill() {
+	local sig="$1" ; shift
+	local dirs dir pid dead
+
+	dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+		dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
+	if [ ! -d "${dir}" ] ; then
+		continue
+	elif [ ! -f "${dir}/pid" ] ; then
+		continue
+	fi
+
+	pid="$(cat "${dir}/pid")"
+
+	if echo "${pid}" | grep -Pq '^\d+$' ; then
+		kill "${sig}" ${pid} 2> '/dev/null' || true
+	fi
+
+	dead=0
+	for i in $(seq 1 5) ; do
+		if ! ps ${pid} > '/dev/null' ; then
+		dead=1
+		break
+		fi
+
+		sleep 1
+	done
+
+	if [ ${dead} -eq 0 ] ; then
+		kill -KILL ${pid} 2> '/dev/null' || true
+	fi
+
+	rm "${dir}/pid"
+	done
+}
+
+stop() {
+	_kill -INT "$@"
+}
+
+nkill() {
+	_kill -KILL "$@"
+}
+
+
+# Main script - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+setup_environment
+
+if [ $# -lt 1 ] ; then
+	fatal "missing action operand"
+fi
+
+action="$1" ; shift
+
+case "${action}" in
+	'kill')
+	nkill "$@"
+	;;
+	'start')
+	start "$@"
+	;;
+	'stop')
+	stop "$@"
+	;;
+	*)
+	fatal "unknown action: '${action}'"
+	;;
+esac

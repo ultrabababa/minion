@@ -1,0 +1,185 @@
+#!/bin/bash
+
+set -e
+
+script_name='aptos'
+install_root="${HOME}/install/aptos"
+deploy_root="${HOME}/deploy/aptos"
+
+
+# Utility functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+fatal() {
+	local msg="$1" ; shift
+
+	exec >&2
+
+	echo "${script_name}: ${msg}"
+	echo
+	echo "Usage: $0 start (1)"
+	echo "       $0 stop (2)"
+	echo "       $0 kill (3)"
+	echo
+	echo "Either start (1), gracefully stop (2) or kill (3) the nodes deployed"
+	echo "on this worker"
+
+	exit 1
+}
+
+setup_environment() {
+	if [ ! -e "${install_root}" ] ; then
+	fatal "cannot find aptos install at '${install_root}'"
+	fi
+
+	export PATH="${install_root}/target/release:${PATH}"
+
+	if ! command -v 'aptos-node' > '/dev/null' 2> '/dev/null' ; then
+	fatal "cannot find aptos-node executable in '${install_root}'"
+	fi
+
+	export APTOS_DISABLE_PROMETHEUS_NODE_METRICS=1
+	export APTOS_DISABLE_TELEMETRY=true
+	export RUST_LOG="trace"
+}
+
+waitForNodeToInit() {
+	local port="$1" ; shift
+    local waitTime="$1" ; shift
+
+	echo "--- waiting for $port"
+	declare startTime=$SECONDS
+	while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:$port/v1/-/healthy)" != "200" ]]; do
+	declare timeWaited=$((SECONDS - startTime))
+	if [[ $timeWaited -ge $waitTime ]]; then
+		echo "^^^ +++"
+		echo "Error: $port not ready in $timeWaited seconds"
+		nkill
+		exit 1
+	fi
+	echo "Waiting for $port ($timeWaited)..."
+	sleep 5
+	done
+	echo "$port ready"
+}
+
+
+# Actions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+start() {
+	local dirs dir pid config
+
+	dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+		dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
+	if [ -d "${dir}" ] ; then
+		config="${dir}/node.yaml"
+
+		if [ ! -e "${config}" ] ; then
+		fatal "cannot find aptos node.yaml at '${config}'"
+		fi
+
+		for attempt in {1..10}
+		do
+			ulimit -n 65535
+			aptos-node -f "${config}" \
+				>> "${dir}/out" 2>> "${dir}/err" &
+			pid=$!
+
+			sleep 2
+
+			if [[ -z $pid ]] || ! kill -0 "$pid"; then
+				echo "############## validator exited, restarting ##############"
+				continue
+			else
+				echo ${pid} > "${dir}/pid"
+				break
+			fi
+		done
+	fi
+	done
+
+	for dir in "${dirs[@]}" ; do
+	if [ -d "${dir}" ] ; then
+		waitForNodeToInit "$(grep -oP '(?<=address: "0.0.0.0:)[^,"]*' ${dir}/node.yaml | head -1)" 600
+	fi
+	done
+
+	sleep 2
+}
+
+_kill() {
+	local sig="$1" ; shift
+	local dirs dir pid dead
+
+	dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+		dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
+	if [ ! -d "${dir}" ] ; then
+		continue
+	elif [ ! -f "${dir}/pid" ] ; then
+		continue
+	fi
+
+	pid="$(cat "${dir}/pid")"
+
+	if echo "${pid}" | grep -Pq '^\d+$' ; then
+		kill "${sig}" ${pid} 2> '/dev/null' || true
+	fi
+
+	dead=0
+	for i in $(seq 1 5) ; do
+		if ! ps ${pid} > '/dev/null' ; then
+		dead=1
+		break
+		fi
+
+		sleep 1
+	done
+
+	if [ ${dead} -eq 0 ] ; then
+		kill -KILL ${pid} 2> '/dev/null' || true
+	fi
+
+	rm "${dir}/pid"
+	done
+}
+
+stop() {
+	_kill -INT "$@"
+}
+
+nkill() {
+	_kill -KILL "$@"
+}
+
+
+# Main script - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+setup_environment
+
+if [ $# -lt 1 ] ; then
+	fatal "missing action operand"
+fi
+
+action="$1" ; shift
+
+case "${action}" in
+	'kill')
+	nkill "$@"
+	;;
+	'start')
+	start "$@"
+	;;
+	'stop')
+	stop "$@"
+	;;
+	*)
+	fatal "unknown action: '${action}'"
+	;;
+esac

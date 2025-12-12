@@ -50,18 +50,22 @@ deploy_primary() {
 	fatal "missing port operand"
     elif [ $# -lt 2 ] ; then
 	fatal "missing nsecondary operand"
-    elif [ $# -gt 2 ] ; then
-	fatal "unexpected operand '$3'"
+    elif [ $# -lt 3 ] ; then
+	fatal "missing nobserver operand"
+    elif [ $# -gt 3 ] ; then
+	fatal "unexpected operand '$4'"
     fi
 
     local port="$1" ; shift
     local nsecondary="$1" ; shift
+    local nobserver="$1" ; shift
 
     prepare
 
     mkdir "${deploy_root}/primary"
     echo "${port}" > "${deploy_root}/primary/port"
     echo "${nsecondary}" > "${deploy_root}/primary/nsecondary"
+    echo "${nobserver}" > "${deploy_root}/primary/nobserver"
 }
 
 

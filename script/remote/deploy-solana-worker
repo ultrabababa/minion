@@ -59,7 +59,7 @@ prepare() {
     fi
 
     pkill -f 'multinode-demo' || true
-    pkill -f 'solana-validator' || true
+    pkill -f 'agave-validator' || true
 }
 
 
@@ -79,6 +79,10 @@ initialize_nodes() {
         solana-keygen new --no-passphrase -so "${configdir}/identity.json"
         solana-keygen new --no-passphrase -so "${configdir}/vote-account.json"
         solana-keygen new --no-passphrase -so "${configdir}/stake-account.json"
+        solana-keygen new --no-passphrase -so "${configdir}/authorized-withdrawer.json"
+
+        local pubkey=$(solana-keygen pubkey "${configdir}/identity.json")
+        echo "n${index} pubkey -- ${pubkey}"
     done
 }
 
@@ -142,13 +146,15 @@ generate_genesis() {
         multinode-demo/setup.sh "${args[@]}"
     )
 
-    solana-ledger-tool -l "$configdir"/bootstrap-validator create-snapshot 0 "$configdir"/bootstrap-validator --warp-slot 1
-    solana-ledger-tool -l "$configdir"/bootstrap-validator shred-version --max-genesis-archive-unpacked-size 1073741824 | tee "$configdir"/shred-version
-    solana-ledger-tool -l "$configdir"/bootstrap-validator bank-hash | tee "$configdir"/bank-hash
+    agave-ledger-tool -l "$configdir"/bootstrap-validator create-snapshot 0 "$configdir"/bootstrap-validator --warp-slot 1
+    agave-ledger-tool -l "$configdir"/bootstrap-validator shred-version --max-genesis-archive-unpacked-size 1073741824 | tee "$configdir"/shred-version
+    agave-ledger-tool -l "$configdir"/bootstrap-validator bank-hash | tee "$configdir"/bank-hash
 
     for i in $(seq 2 ${num}) ; do
 	path="${netroot}/n$(( i - 1 ))/config"
+    mkdir "${path}/validator"
     cp "$configdir"/{faucet.json,shred-version,bank-hash} "$path"
+    cp -R "$configdir/bootstrap-validator"/{genesis.tar.bz2,snapshot*.zst,genesis.bin,rocksdb} "$path/validator"
     done
 }
 

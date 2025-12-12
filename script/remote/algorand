@@ -54,55 +54,60 @@ setup_environment() {
 # Actions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 start() {
-    local dir
+    local dirs dir
 
+    dirs=("${deploy_root}/n"*)
     if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
+		dirs=("${@/#/${deploy_root}/n}")
     fi
 
-    for dir in "${node_root}"* ; do
+    for dir in "${dirs[@]}" ; do
 	if [ -e "${dir}" ] ; then
-	    "${dir}/start" > "${dir}/out" 2> "${dir}/err"
-	fi
-    done
-
-    for dir in "${client_root}"* ; do
-	if [ -e "${dir}" ] ; then
-	    "${dir}/start" > "${dir}/out" 2> "${dir}/err"
+	    "${dir}/start" >> "${dir}/out" 2>> "${dir}/err"
 	fi
     done
 }
 
 stop() {
-    local dir
+    local dirs dir
 
+    dirs=("${deploy_root}/n"*)
     if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
+		dirs=("${@/#/${deploy_root}/n}")
     fi
 
-    for dir in "${node_root}"* ; do
+    for dir in "${dirs[@]}" ; do
 	if [ -e "${dir}" ] ; then
 	    goal node stop --datadir "${dir}" > '/dev/null' || true
 	fi
     done
 
-    for dir in "${client_root}"* ; do
+    for dir in "${dirs[@]}" ; do
 	if [ -e "${dir}" ] ; then
-	    goal node stop --datadir "${dir}" > '/dev/null' || true
+	    killall 'algod' 2> '/dev/null' || true
+
+        rm -rf "${HOME}/.algorand"
+
+        break
 	fi
     done
-
-    killall 'algod' 2> '/dev/null' || true
-
-    rm -rf "${HOME}/.algorand"
 }
 
 die() {
+    local dirs
+
+    dirs=("${deploy_root}/n"*)
     if [ $# -gt 0 ] ; then
-	fatal "unexpected operand '$1'"
+		dirs=("${@/#/${deploy_root}/n}")
     fi
 
-    killall -KILL 'algod' 2> '/dev/null' || true
+    for dir in "${dirs[@]}" ; do
+	if [ -e "${dir}" ] ; then
+        killall -KILL 'algod' 2> '/dev/null' || true
+
+        break
+    fi
+    done
 }
 
 

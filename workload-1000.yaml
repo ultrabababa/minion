@@ -1,5 +1,0 @@
-# Constant 1000 tps
-id: "native-1000"
-txs:
-    0: 1000
-    120: 0

@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+#   install-avalanche - install the Avalanche blockchain from its repository
+#
+
+set -e
+
+# Create an install dir if not already there.
+#
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
+
+if [ -e 'install/avalanche' ] ; then
+    sudo rm -rf 'install/avalanche'
+fi
+
+golang_version='1.20.12'
+
+avalanche_url='https://github.com/ava-labs/avalanchego.git'
+avalanche_checkout='v1.10.18-rc.2'
+
+if [ ! -f "$HOME/helper" ]; then
+    echo "Cannot find helper script" >&2
+    exit 1
+fi
+. "$HOME/helper"
+
+# Install common utilities.
+#
+asdf_install golang "$golang_version"
+
+# Create an install dir if not already there.
+#
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
+
+# Clone Avalanche from the official repository and build it.
+#
+mkdir 'install/avalanche'
+(
+    cd 'install/avalanche'
+
+	git init
+	git remote add origin "${avalanche_url}"
+	git fetch --depth 1 origin "${avalanche_checkout}"
+	git checkout FETCH_HEAD
+
+    ./scripts/build.sh
+
+    tar czfv '../avalanche.tar.gz' --transform 's,^,avalanche/,' 'build/avalanchego'
+)

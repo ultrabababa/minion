@@ -1,5 +1,8 @@
-package deploy_algorand;
+package deploy_diablo;
 
+use Cwd qw( abs_path );
+use File::Basename qw( dirname );
+use lib dirname( abs_path ( __FILE__ ) );
 use strict;
 use warnings;
 
@@ -7,6 +10,10 @@ use File::Temp qw(tempfile);
 use List::Util qw(sum);
 
 use Minion::System::Pgroup;
+
+
+use deploy_common qw ( get_nodes );
+use deploy_diablo qw ( get_nodes );
 
 
 my $PRIMARY_TCP_PORT = 5001;
@@ -33,103 +40,20 @@ my $DEPLOY = 'deploy/diablo';
 my $CHAIN_PRIMARY_LOC = $DEPLOY . '/primary/chain.yaml';
 my $CHAIN_LOC = $DEPLOY . '/chain.yaml';
 my $WORKLOAD_LOC = $DEPLOY . '/workload.yaml';
-my $KEYS_LOC = $DEPLOY . '/keys.json';
 
 
 my $ALGORAND_PATH = $SHARED . '/algorand';
+my $APTOS_PATH = $SHARED . '/aptos';
 my $DIEM_PATH = $SHARED . '/diem';
 my $POA_PATH = $SHARED . '/poa';
 my $QUORUMIBFT_PATH = $SHARED . '/quorum-ibft';
 my $QUORUMRAFT_CHAIN_PATH = $SHARED . '/quorum-raft/chain.yaml';
 my $SOLANA_PATH = $SHARED . '/solana';
 my $AVALANCHE_PATH = $SHARED . '/avalanche';
+my $SEVM_PATH = $SHARED . '/sevm';
 
-
-# Extract from the given $path the Quorum nodes.
-#
-# Return: { $ip => { 'worker'      => $worker
-#                  , 'primary'     => $primary
-#                  , 'secondaries' => $secondaries
-#                  }
-#         }
-#
-#   where $ip is an IPv4 address, $worker is a Minion::Worker object, $primary
-#   is '1' if the worker is primary and '0' if not, and $secondaries
-#   indicates the number of secondary instances to deploy on $worker.
-#
-sub get_nodes
-{
-    my ($path) = @_;
-    my (%nodes, $node, $fh, $line, $ip, $role, $number, $worker, $assigned);
-
-    if (!open($fh, '<', $path)) {
-	die ("cannot open '$path' : $!");
-    }
-
-    while (defined($line = <$fh>)) {
-	chomp($line);
-	($ip, $role, $number) = split(':', $line);
-
-	$node = $nodes{$ip};
-
-	if (!defined($node)) {
-	    $assigned = undef;
-
-	    foreach $worker ($FLEET->members()) {
-		if ($worker->can('public_ip')) {
-		    $assigned = $worker->public_ip();
-		} elsif ($worker->can('host')) {
-		    $assigned = $worker->host();
-		}
-
-		if ($assigned eq $ip) {
-		    $assigned = $worker;
-		    last;
-		} else {
-		    $assigned = undef;
-		}
-	    }
-
-	    if (!defined($assigned)) {
-		die ("cannot find worker with ip '$ip' in deployment fleet");
-	    }
-
-	    $node = {
-		'worker' => $assigned,
-		'primary' => 0,
-		'secondary' => 0
-	    };
-
-	    $nodes{$ip} = $node;
-	}
-
-	if ($role eq 'primary') {
-	    if ($number ne '1') {
-		die ("malformed roles file '$path': $line");
-	    }
-	    $node->{'primary'} += 1;
-	} elsif ($role eq 'secondary') {
-	    $node->{'secondaries'} += $number;
-	} else {
-	    die ("malformed roles file '$path': $line");
-	}
-    }
-
-    close($fh);
-
-    $number = 0;
-    foreach $ip (keys(%nodes)) {
-	$number += $nodes{$ip}->{'primary'};
-    }
-
-    if ($number < 1) {
-	die ("no primary node defined in '$path'");
-    } elsif ($number > 1) {
-	die ("multiple primary nodes defined in '$path'");
-    }
-
-    return \%nodes;
-}
+my $DIABLO_OBSERVER_PATH = $SHARED . '/diablo-observer';
+my $DIABLO_OBSERVER_ROLES_PATH = $DIABLO_OBSERVER_PATH . '/behaviors.txt';
 
 
 sub grep_region_chain
@@ -237,6 +161,18 @@ sub deploy_diablo_algorand
     return deploy_diablo_primary($primary, $ALGORAND_PATH);
 }
 
+sub deploy_diablo_aptos
+{
+    my ($nodes) = @_;
+    my ($primary);
+
+    ($primary) = map { $nodes->{$_}->{'worker'} }
+                 grep { $nodes->{$_}->{'primary'} > 0 }
+                 keys(%$nodes);
+
+    return deploy_diablo_primary($primary, $APTOS_PATH);
+}
+
 sub deploy_diablo_diem
 {
     my ($nodes) = @_;
@@ -302,6 +238,18 @@ sub deploy_diablo_avalanche
     return deploy_diablo_primary($primary, $AVALANCHE_PATH);
 }
 
+sub deploy_diablo_sevm
+{
+    my ($nodes) = @_;
+    my ($primary);
+
+    ($primary) = map { $nodes->{$_}->{'worker'} }
+                 grep { $nodes->{$_}->{'primary'} > 0 }
+                 keys(%$nodes);
+
+    return deploy_diablo_primary($primary, $SEVM_PATH);
+}
+
 
 sub specialize_workload
 {
@@ -343,13 +291,22 @@ sub deploy_diablo
 
     $nodes = get_nodes($ROLES_PATH);
 
+    my $nobservers = 0;
+    if (-f ($DIABLO_OBSERVER_ROLES_PATH)) {
+    my $observer_nodes = deploy_common::get_nodes($DIABLO_OBSERVER_ROLES_PATH);
+    $nobservers = sum map { $observer_nodes->{$_}->{'number'} } keys(%$observer_nodes);
+    }
+    # $nobservers += 1;
+
+    printf("nobservers %d\n", $nobservers);
 
     foreach $ip (keys(%$nodes)) {
 	if ($nodes->{$ip}->{'primary'} > 0) {
 	    $proc = $RUNNER->run(
 		$nodes->{$ip}->{'worker'},
 		[ 'deploy-diablo-worker', 'primary', $PRIMARY_TCP_PORT,
-		  sum map { $nodes->{$_}->{'secondaries'} } keys(%$nodes)
+		  sum(map { $nodes->{$_}->{'secondaries'} } keys(%$nodes)),
+          $nobservers
 		]
 		);
 	    if ($proc->wait() != 0) {
@@ -405,6 +362,10 @@ sub deploy_diablo
 	return deploy_diablo_algorand($nodes);
     }
 
+	if (-f ($APTOS_PATH . '/setup.yaml')) {
+	return deploy_diablo_aptos($nodes);
+    }
+
     if (-f ($DIEM_PATH . '/setup.yaml')) {
 	return deploy_diablo_diem($nodes);
     }
@@ -423,6 +384,10 @@ sub deploy_diablo
 
 	if (-f ($AVALANCHE_PATH . '/setup.yaml')) {
 	return deploy_diablo_avalanche($nodes);
+    }
+
+    if (-f ($SEVM_PATH . '/setup.yaml')) {
+	return deploy_diablo_sevm($nodes);
     }
 
 

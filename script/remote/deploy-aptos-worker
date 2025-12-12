@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_name='deploy-aptos-worker'
+install_root="${HOME}/install/aptos-tools"
+deploy_root="${HOME}/deploy/aptos"
+prepare_root="${HOME}/prepare/aptos"
+
+
+# Utility functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+fatal() {
+	local msg="$1" ; shift
+
+	exec >&2
+
+	echo "${script_name}: ${msg}"
+	echo
+	echo "Usage: $0 prepare                                                (1)"
+	echo "       $0 generate <behaviors>                                   (2)"
+	echo
+	echo "Prepare the Aptos running directory in (1) or use the Aptos"
+	echo "toolchain to generate a network from a list of machines with the"
+	echo "corresponding numbers of nodes <behaviors>"
+
+	exit 1
+}
+
+setup_environment() {
+	# if [ ! -e "${install_root}" ] ; then
+	# fatal "cannot find aptos install at '${install_root}'"
+	# fi
+
+	# export PATH="${install_root}/target/release:${PATH}"
+
+	# if ! command -v 'aptos' > '/dev/null' 2> '/dev/null' ; then
+	# fatal "cannot find aptos executable in '${install_root}'"
+	# fi
+
+	if [ ! -e "${install_root}" ] ; then
+	fatal "cannot find aptos-tools install at '${install_root}'"
+	fi
+
+	export PATH="${install_root}/target/release:${PATH}"
+
+	if ! command -v 'aptos-tools' > '/dev/null' 2> '/dev/null' ; then
+	fatal "cannot find aptos-tools executable in '${install_root}'"
+	fi
+}
+
+list_blockchain_nodes() {
+	if [ $# -lt 1 ] ; then
+	fatal "missing behaviors operand"
+	elif [ $# -gt 1 ] ; then
+	fatal "unexpected operand '$2'"
+	fi
+
+	local behaviors="$1" ; shift
+    local line ip count
+
+    while read line ; do
+	ip="$(echo "${line}" | cut -d':' -f1)"
+	count="$(echo "${line}" | cut -d':' -f2)"
+
+	while [ ${count} -gt 0 ] ; do
+	    echo "${ip}"
+	    count=$(( count - 1 ))
+	done
+    done < "${behaviors}"
+}
+
+
+# Prepare action  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+prepare() {
+	if [ $# -gt 0 ] ; then
+	fatal "unexpected operand '$1'"
+	fi
+
+	if [ -e "${deploy_root}" ] ; then
+	rm -rf "${deploy_root}"
+	fi
+
+	mkdir -p "${deploy_root}"
+
+	if [ ! -d "${prepare_root}" ] ; then
+	mkdir -p "${prepare_root}"
+	fi
+
+	# pkill -f 'aptos-node' || true
+}
+
+
+# Generate action - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+generate() {
+	if [ $# -lt 1 ] ; then
+	fatal "missing behaviors operand"
+	elif [ $# -gt 1 ] ; then
+	fatal "unexpected operand '$2'"
+	fi
+
+	local behaviors="$1" ; shift
+	local netroot="${deploy_root}/network"
+
+	setup_environment
+
+	if [ -e "${netroot}" ] ; then
+	rm -rf "${netroot}"
+	fi
+
+	local numnode=$(list_blockchain_nodes "${behaviors}" | wc -l)
+	local numaccounts=2000
+	local prepared_path="${prepare_root}/network-${numnode}-${numaccounts}"
+
+	if [ ! -e "${prepared_path}" ] ; then
+		aptos-tools -b "${behaviors}" -d "${deploy_root}" -n "${numaccounts}" -p "${prepared_path}"
+	fi
+	cp -R "${prepared_path}" "${netroot}"
+
+	tar -C "${deploy_root}" -czf "${netroot}.tar.gz" 'network'
+
+	rm -rf "${netroot}"
+}
+
+
+# Main script - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+if [ $# -lt 1 ] ; then
+	fatal "missing action operand"
+fi
+
+action="$1" ; shift
+
+case "${action}" in
+	'prepare')
+	prepare "$@"
+	;;
+	'generate')
+	generate "$@"
+	;;
+	*)
+	fatal "unknown action: '${action}'"
+	;;
+esac

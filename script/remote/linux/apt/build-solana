@@ -1,0 +1,160 @@
+#!/bin/bash
+#
+#   build-solana - build the Solana blockchain from its repository
+#
+
+set -e
+
+# Create an install dir if not already there.
+#
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
+
+if [ ! -e "$HOME/.cache" ] ; then
+    mkdir "$HOME/.cache"
+fi
+
+if [ -e 'install/solana' ] ; then
+    sudo rm -rf 'install/solana'
+fi
+
+if [ -e 'install/solana-accounts' ] ; then
+    sudo rm -rf 'install/solana-accounts'
+fi
+
+if [ -e "$HOME/.cache/solana-spl" ] ; then
+    sudo rm -rf "$HOME/.cache/solana-spl"
+    sudo rm "$HOME/.cache/solana-perf*.tgz" || true
+fi
+
+rust_version='1.75.0'
+golang_version='1.19.6'
+sccache_version='0.7.6'
+
+solana_url='https://github.com/anza-xyz/agave.git'
+solana_checkout='7696b27311660e6cbe68e8f4324bd72d242b0348' # v1.18.15
+
+if [ ! -f "$HOME/helper" ]; then
+    echo "Cannot find helper script" >&2
+    exit 1
+fi
+. "$HOME/helper"
+
+# Install common utilities.
+#
+export RUST_WITHOUT=rust-docs
+asdf_install rust "${rust_version}"
+asdf_install sccache "${sccache_version}"
+cargo install cargo-cache
+asdf_install golang "${golang_version}"
+
+# Install common utilities and Solana build dependencies.
+#
+sudo -n apt-get install -yy 'libssl-dev' 'libudev-dev' 'pkg-config' 'zlib1g-dev' 'llvm' 'clang' 'cmake' 'make' 'libprotobuf-dev' 'protobuf-compiler' 'lld'
+
+# Clone Solana from the official repository and build it.
+#
+mkdir 'install/solana'
+(
+    cd 'install/solana'
+
+	git init
+	git remote add origin "${solana_url}"
+	git fetch --depth 1 origin "${solana_checkout}"
+	git checkout FETCH_HEAD
+
+	curl https://github.com/solana-labs/solana/commit/9a5aca36e6a93e1539bda6e1141a38a3fd40d06f.patch | git apply -R
+
+	git apply <<'EOF'
+diff --git a/multinode-demo/validator.sh b/multinode-demo/validator.sh
+index 9090055b90..cf65318234 100755
+--- a/multinode-demo/validator.sh
++++ b/multinode-demo/validator.sh
+@@ -332,7 +332,7 @@ setup_validator_accounts() {
+ }
+
+ # shellcheck disable=SC2086
+-rpc_url=$($solana_gossip --allow-private-addr rpc-url --timeout 180 --entrypoint "$gossip_entrypoint")
++# rpc_url=$($solana_gossip --allow-private-addr rpc-url --timeout 180 --entrypoint "$gossip_entrypoint")
+
+ [[ -r "$identity" ]] || $solana_keygen new --no-passphrase -so "$identity"
+ [[ -r "$vote_account" ]] || $solana_keygen new --no-passphrase -so "$vote_account"
+EOF
+
+    export RUSTFLAGS="-Ctarget-cpu=native -Clink-arg=-fuse-ld=lld -Ctarget-feature=+sse4.2 -Cstrip=symbols -Cdebuginfo=0"
+    export RUSTC_WRAPPER="sccache"
+	export RUST_REED_SOLOMON_ERASURE_ARCH=native
+
+    ./scripts/cargo-install-all.sh --validator-only .
+	./fetch-spl.sh
+
+    tar czfhv '../solana.tar.gz' --transform 's,^,solana/,' bin/deps bin/perf-libs 'bin/solana-genesis' 'bin/solana-gossip' 'bin/solana-keygen' 'bin/agave-ledger-tool' 'bin/agave-validator' 'fetch-perf-libs.sh' 'fetch-spl.sh' multinode-demo net scripts
+	tar czfv '../solana-libs.tar.gz' -C $HOME/.cache/ solana-perf-v0.19.3.tgz solana-spl
+)
+
+mkdir 'install/solana-accounts'
+(
+    cd 'install/solana-accounts'
+
+    cat > 'main.go' <<'EOF'
+package main
+
+import (
+	"bufio"
+	"crypto/ed25519"
+	"crypto/rand"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+)
+
+func main() {
+	path := os.Args[1]
+	amount, err := strconv.ParseUint(os.Args[2], 10, 64)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	size, err := strconv.ParseUint(os.Args[3], 10, 64)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	file, err := os.Create(path)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	fmt.Fprint(writer, "---")
+	for i := uint64(0); i < size; i++ {
+		seed := make([]byte, ed25519.SeedSize)
+		if _, err := io.ReadFull(rand.Reader, seed); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		privateKey := ed25519.NewKeyFromSeed(seed)
+		fmt.Fprint(writer, "\n\"[")
+		for _, v := range privateKey[:len(privateKey)-1] {
+			fmt.Fprintf(writer, "%d,", v)
+		}
+		fmt.Fprintf(writer, "%d]\":\n  balance: %d\n  owner: \"11111111111111111111111111111111\"\n  data: \"\"\n  executable: false", privateKey[len(privateKey)-1], amount)
+	}
+}
+EOF
+    chmod 755 'main.go'
+
+    go run 'main.go' accounts.yaml 50000000000 10000
+    sed -i '1d' accounts.yaml
+    echo "" >> accounts.yaml
+
+	tar czfv '../solana-accounts.tar.gz' --transform 's,^,solana-accounts/,' accounts.yaml
+)

@@ -1,0 +1,16 @@
+ubuntu@10.30.10.1 = chain
+ubuntu@10.30.10.2 = chain
+ubuntu@10.30.10.3 = chain
+ubuntu@10.30.10.4 = chain
+ubuntu@10.30.10.5 = chain
+ubuntu@10.30.10.6 = chain
+ubuntu@10.30.10.7 = chain
+ubuntu@10.30.10.8 = chain
+ubuntu@10.30.10.9 = chain
+ubuntu@10.30.10.10 = chain
+ubuntu@10.30.20.1 = primary,secondary
+ubuntu@10.30.20.2 = secondary
+ubuntu@10.30.20.3 = secondary
+ubuntu@10.30.20.4 = secondary
+ubuntu@10.30.20.5 = secondary
+ubuntu@10.30.30.2 = builder

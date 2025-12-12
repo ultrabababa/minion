@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_name='deploy-sevm-worker'
+deploy_root="${HOME}/deploy/sevm"
+prepare_root="${HOME}/prepare/sevm"
+
+
+# Utility functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+fatal() {
+	local msg="$1" ; shift
+
+	exec >&2
+
+	echo "${script_name}: ${msg}"
+	echo
+	echo "Usage: $0 prepare                                                (1)"
+	echo "       $0 generate <behaviors>                                   (2)"
+	echo
+	echo "Prepare the SEVM running directory in (1) or use the SEVM"
+	echo "toolchain to generate a network from a list of machines with the"
+	echo "corresponding numbers of nodes <behaviors>"
+
+	exit 1
+}
+
+list_blockchain_nodes() {
+	if [ $# -lt 1 ] ; then
+	fatal "missing behaviors operand"
+	elif [ $# -gt 1 ] ; then
+	fatal "unexpected operand '$2'"
+	fi
+
+	local behaviors="$1" ; shift
+    local line ip count
+
+    while read line ; do
+	ip="$(echo "${line}" | cut -d':' -f1)"
+	count="$(echo "${line}" | cut -d':' -f2)"
+
+	while [ ${count} -gt 0 ] ; do
+	    echo "${ip}"
+	    count=$(( count - 1 ))
+	done
+    done < "${behaviors}"
+}
+
+
+# Prepare action  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+prepare() {
+	if [ $# -gt 0 ] ; then
+	fatal "unexpected operand '$1'"
+	fi
+
+	if [ -e "${deploy_root}" ] ; then
+	rm -rf "${deploy_root}"
+	fi
+
+	mkdir -p "${deploy_root}"
+
+	if [ ! -d "${prepare_root}" ] ; then
+	mkdir -p "${prepare_root}"
+	fi
+}
+
+
+# Generate action - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+replace_genesis_ips() {
+  local GENESIS="$1"
+  local NEWIPS="$2"
+
+  if [[ ! -f "$GENESIS" ]]; then
+	echo "Cannot find genesis file '$GENESIS'" >&2
+    return 1
+  fi
+
+  if [[ ! -f "$NEWIPS" ]]; then
+	echo "Cannot find new IPs file '$NEWIPS'" >&2
+    return 1
+  fi
+
+  local i=1
+
+  while IFS=":" read -r new_ip _; do
+    [[ -z "$new_ip" ]] && continue
+
+    new_ip=$(echo "$new_ip" | xargs)
+
+    local old_ip="127.0.0.$i"
+    local old_hex old_len old_len_byte padlen_old old_final
+
+    old_hex=$(echo -n "$old_ip" | xxd -p | tr -d '\n')
+    old_len=${#old_ip}
+    old_len_byte=$(printf "%02x" $((old_len * 2)))
+    padlen_old=$((64 - (${#old_hex} + 2)))
+    old_final="${old_hex}$(printf "%0${padlen_old}d" 0)${old_len_byte}"
+
+    local new_hex new_len new_len_byte padlen_new new_final
+
+    new_hex=$(echo -n "$new_ip" | xxd -p | tr -d '\n')
+    new_len=${#new_ip}
+    new_len_byte=$(printf "%02x" $((new_len * 2)))
+    padlen_new=$((64 - (${#new_hex} + 2)))
+    new_final="${new_hex}$(printf "%0${padlen_new}d" 0)${new_len_byte}"
+
+    sed -i "s/${old_final}/${new_final}/g" "$GENESIS"
+
+    ((i++))
+  done < "$NEWIPS"
+}
+
+generate() {
+	if [ $# -lt 1 ] ; then
+	fatal "missing behaviors operand"
+	elif [ $# -gt 1 ] ; then
+	fatal "unexpected operand '$2'"
+	fi
+
+	local behaviors="${HOME}/$1" ; shift
+	local netroot="${deploy_root}/network"
+
+	if [ -e "${netroot}" ] ; then
+	rm -rf "${netroot}"
+	fi
+
+	local numnode=$(list_blockchain_nodes "${behaviors}" | wc -l)
+	local numaccounts=10000
+	local prepared_path="${prepare_root}/network-${numnode}-${numaccounts}"
+
+	if [ ! -e "${prepared_path}" ] ; then
+		echo "Not supported: prepared path '${prepared_path}' does not exist" >&2
+		exit 1
+	fi
+
+	cp -R "${prepared_path}" "${netroot}"
+
+	replace_genesis_ips "${netroot}/n0/data/database/genesis.json" "${behaviors}"
+	for i in $(seq 1 $(( numnode - 1 )) ) ; do
+	    cp "${netroot}/n0/data/database/genesis.json" "${netroot}/n${i}/data/database/genesis.json"
+	done
+
+	tar -C "${deploy_root}" -czf "${netroot}.tar.gz" 'network'
+
+	rm -rf "${netroot}"
+}
+
+
+# Main script - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+if [ $# -lt 1 ] ; then
+	fatal "missing action operand"
+fi
+
+action="$1" ; shift
+
+case "${action}" in
+	'prepare')
+	prepare "$@"
+	;;
+	'generate')
+	generate "$@"
+	;;
+	*)
+	fatal "unknown action: '${action}'"
+	;;
+esac

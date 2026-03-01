@@ -33,19 +33,15 @@ asdf_install golang "$golang_version"
 # Clone Diablo from the official repository and build it.
 #
 mkdir 'install/diablo'
+tar xzf ~/diablo-src.tar.gz -C install/diablo --strip-components=1
 (
     cd 'install/diablo'
 
-    git init
-	git remote add origin "${diablo_url}"
-	git fetch --depth 1 origin "${diablo_checkout}"
-	git checkout FETCH_HEAD
-
     go mod tidy
 
-    go build -o diablo
+    go build -o diablo .
 
-    tar czfv '../diablo.tar.gz' --transform 's,^,diablo/,' 'diablo' 'move-contracts' 'solidity-contracts' 'teal-contracts'
+    tar czfv '../diablo.tar.gz' --transform 's,^,diablo/,' 'diablo' 'move-contracts' 'solidity-contracts' 'teal-contracts' 2>/dev/null || tar czfv '../diablo.tar.gz' --transform 's,^,diablo/,' 'diablo'
 )
 
 # go clean -cache

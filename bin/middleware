@@ -1,6 +1,7 @@
 #!/usr/bin/env -S perl -l
 
-use lib qw(. ./lib);
+use FindBin qw($Bin);
+use lib "$Bin/..", "$Bin/../lib";
 use strict;
 use warnings;
 
@@ -403,6 +404,20 @@ sub build
 	    fatal("failed to sync '%s'", $helper);
 	}
 
+    if (system("tar czhf diablo-src.tar.gz diablo/") != 0) {
+        fatal("failed to create diablo-src.tar.gz");
+    }
+    if (system("tar czhf hotstuff-src.tar.gz hotstuff/") != 0) {
+        fatal("failed to create hotstuff-src.tar.gz");
+    }
+
+    if ($builder->send(['diablo-src.tar.gz'], TARGET => 'diablo-src.tar.gz')->wait() != 0) {
+        fatal("failed to send diablo-src");
+    }
+    if ($builder->send(['hotstuff-src.tar.gz'], TARGET => 'hotstuff-src.tar.gz')->wait() != 0) {
+        fatal("failed to send hotstuff-src");
+    }
+
     if ($runner->run($builder, [ 'build-diablo' ])->wait() != 0) {
 	fatal("failed to build diablo");
     }
@@ -411,65 +426,72 @@ sub build
 		fatal("failed to receive diablo")
 	}
 
-	if ($runner->run($builder, [ 'build-aptos' ])->wait() != 0) {
-	fatal("failed to build aptos");
+    if ($runner->run($builder, [ 'build-hotstuff' ])->wait() != 0) {
+        fatal("failed to build hotstuff");
+    }
+    if ($builder->recv(['install/hotstuff.tar.gz'], TARGET => 'binaries/hotstuff.tar.gz' )->wait() != 0){
+        fatal("failed to receive hotstuff");
     }
 
-	if ($builder->recv(['install/aptos.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive aptos")
-	}
-
-	if ($runner->run($builder, [ 'build-aptos-tools' ])->wait() != 0) {
-	fatal("failed to build aptos-tools");
-    }
-
-	if ($builder->recv(['install/aptos-tools.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive aptos-tools")
-	}
-
-	if ($runner->run($builder, [ 'build-avalanche' ])->wait() != 0) {
-	fatal("failed to build avalanche");
-    }
-
-	if ($builder->recv(['install/avalanche.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive avalanche")
-	}
-
-	if ($runner->run($builder, [ 'build-avalanche-tools' ])->wait() != 0) {
-	fatal("failed to build avalanche-tools");
-    }
-
-	if ($builder->recv(['install/avalanche-tools.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive avalanche-tools")
-	}
-
-	if ($runner->run($builder, [ 'build-solana' ])->wait() != 0) {
-	fatal("failed to build solana");
-    }
-
-	if ($builder->recv(['install/solana.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive solana")
-	}
-
-	if ($builder->recv(['install/solana-libs.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive solana-libs")
-	}
-
-	if ($builder->recv(['install/solana-accounts.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive solana-accounts")
-	}
-
-    if ($runner->run($builder, [ 'build-algorand' ])->wait() != 0) {
-	fatal("failed to build algorand");
-    }
-
-	if ($builder->recv(['install/algorand.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive algorand")
-	}
-
-	if ($builder->recv(['install/algorand-tools.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
-		fatal("failed to receive algorand-tools")
-	}
+#	if ($runner->run($builder, [ 'build-aptos' ])->wait() != 0) {
+#	fatal("failed to build aptos");
+#    }
+#
+#	if ($builder->recv(['install/aptos.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive aptos")
+#	}
+#
+#	if ($runner->run($builder, [ 'build-aptos-tools' ])->wait() != 0) {
+#	fatal("failed to build aptos-tools");
+#    }
+#
+#	if ($builder->recv(['install/aptos-tools.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive aptos-tools")
+#	}
+#
+#	if ($runner->run($builder, [ 'build-avalanche' ])->wait() != 0) {
+#	fatal("failed to build avalanche");
+#    }
+#
+#	if ($builder->recv(['install/avalanche.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive avalanche")
+#	}
+#
+#	if ($runner->run($builder, [ 'build-avalanche-tools' ])->wait() != 0) {
+#	fatal("failed to build avalanche-tools");
+#    }
+#
+#	if ($builder->recv(['install/avalanche-tools.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive avalanche-tools")
+#	}
+#
+#	if ($runner->run($builder, [ 'build-solana' ])->wait() != 0) {
+#	fatal("failed to build solana");
+#    }
+#
+#	if ($builder->recv(['install/solana.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive solana")
+#	}
+#
+#	if ($builder->recv(['install/solana-libs.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive solana-libs")
+#	}
+#
+#	if ($builder->recv(['install/solana-accounts.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive solana-accounts")
+#	}
+#
+#    if ($runner->run($builder, [ 'build-algorand' ])->wait() != 0) {
+#	fatal("failed to build algorand");
+#    }
+#
+#	if ($builder->recv(['install/algorand.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive algorand")
+#	}
+#
+#	if ($builder->recv(['install/algorand-tools.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+#		fatal("failed to receive algorand-tools")
+#	}
 }
 
 sub _wait_or_fatal {
@@ -530,18 +552,19 @@ sub install
     );
 
     install_archive($fleet, 'binaries/diablo.tar.gz', 'install/diablo');
-    install_archive($fleet, 'binaries/algorand.tar.gz', 'install/algorand');
-    install_archive($fleet, 'binaries/algorand-tools.tar.gz', 'install/algorand/algorand-tools');
-    install_archive($fleet, 'binaries/aptos.tar.gz', 'install/aptos');
-    install_archive($fleet, 'binaries/aptos-tools.tar.gz', 'install/aptos-tools');
-    install_archive($fleet, 'binaries/avalanche.tar.gz', 'install/avalanche');
-    install_archive($fleet, 'binaries/avalanche-tools.tar.gz', 'install/avalanche-tools');
-    install_archive($fleet, 'binaries/geth-accounts.tar.gz', 'install/geth-accounts');
-    install_archive($fleet, 'binaries/sevm.tar.gz', 'install/sevm');
-    install_archive($fleet, 'binaries/sevm-prepare.tar.gz', 'prepare/sevm/network-10-10000');
-    install_archive($fleet, 'binaries/solana.tar.gz', 'install/solana');
-    install_archive($fleet, 'binaries/solana-accounts.tar.gz', 'install/solana-accounts');
-    install_archive($fleet, 'binaries/solana-libs.tar.gz', '.cache/solana-spl');
+    install_archive($fleet, 'binaries/hotstuff.tar.gz', 'install/hotstuff');
+#    install_archive($fleet, 'binaries/algorand.tar.gz', 'install/algorand');
+#    install_archive($fleet, 'binaries/algorand-tools.tar.gz', 'install/algorand/algorand-tools');
+#    install_archive($fleet, 'binaries/aptos.tar.gz', 'install/aptos');
+#    install_archive($fleet, 'binaries/aptos-tools.tar.gz', 'install/aptos-tools');
+#    install_archive($fleet, 'binaries/avalanche.tar.gz', 'install/avalanche');
+#    install_archive($fleet, 'binaries/avalanche-tools.tar.gz', 'install/avalanche-tools');
+#    install_archive($fleet, 'binaries/geth-accounts.tar.gz', 'install/geth-accounts');
+#    install_archive($fleet, 'binaries/sevm.tar.gz', 'install/sevm');
+#    install_archive($fleet, 'binaries/sevm-prepare.tar.gz', 'prepare/sevm/network-10-10000');
+#    install_archive($fleet, 'binaries/solana.tar.gz', 'install/solana');
+#    install_archive($fleet, 'binaries/solana-accounts.tar.gz', 'install/solana-accounts');
+#    install_archive($fleet, 'binaries/solana-libs.tar.gz', '.cache/solana-spl');
 }
 
 sub create_workers

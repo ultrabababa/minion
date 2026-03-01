@@ -251,7 +251,7 @@ sub update
     confess() if (@err);
 
     my $out = '';
-    my $ret = $self->execute([ 'ip', '-4', '-o', 'a', 'show', 'eth2' ], STDOUT => \$out)->wait();
+    my $ret = $self->execute([ 'ip', '-4', '-o', 'a', 'show', 'eth0' ], STDOUT => \$out)->wait();
 	if ($out =~ m!inet (.*)/!) {
         $self->{__PACKAGE__()}->{_cache}->{_public_ip} = $1;
     }

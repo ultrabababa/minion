@@ -44,6 +44,10 @@ if ($RUNNER->run($FLEET, [ 'deploy-sevm', $redundancy ])->wait() != 0) {
     die ("failed to deploy avalanche");
 }
 
+if ($RUNNER->run($FLEET, [ 'deploy-hotstuff', $redundancy ])->wait() != 0) {
+    die ("failed to deploy hotstuff");
+}
+
 # Deploy diablo at the very end as it might need some configuration generated
 # by the deployment of other blockchains.
 #

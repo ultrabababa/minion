@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+mkdir -p install/hotstuff
+rm -rf install/hotstuff/*
+. "$HOME/helper"
+asdf_install golang 1.22.2
+tar xzf ~/hotstuff-src.tar.gz -C install/hotstuff --strip-components=1
+(
+    cd install/hotstuff
+    # Clear Go build cache to ensure the binary is rebuilt from current source
+    go clean -cache
+    go mod tidy
+    # Build directly without Makefile to avoid protoc/protos dependency issues.
+    # The .pb.go files are already included in the source tarball.
+    go build -buildvcs=false -o ./hotstuff ./cmd/hotstuff
+    tar czfv ../hotstuff.tar.gz --transform 's,^,hotstuff/,' hotstuff
+)

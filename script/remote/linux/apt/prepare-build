@@ -1,4 +1,4 @@
-##!/usr/bin/env bash
+#!/usr/bin/env bash
 #
 #   prepare-install - prepare an apt based system to install packages
 #
@@ -21,7 +21,9 @@ while ! mountpoint --quiet "${mp}" ; do
 done
 part="$(mount | grep ' on '"${mp}"' ' | cut -d' ' -f1)"
 dev="$(basename "$(readlink -f "/sys/class/block/${part##*/}/..")")"
-sudo growpart "/dev/${dev}" 1 || true
+if command -v growpart >/dev/null 2>&1 ; then
+    sudo growpart "/dev/${dev}" 1 || true
+fi
 sudo resize2fs "${part}" || true
 
 
@@ -30,7 +32,24 @@ while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 ; do
     sleep 5
 done
 
-sudo -n apt-get -o DPkg::Lock::Timeout=1200 update -yy
+update_ok=0
+for attempt in 1 2 3 4 5 ; do
+    if sudo -n apt-get -o DPkg::Lock::Timeout=1200 -o Acquire::Retries=3 update -yy ; then
+        update_ok=1
+        break
+    fi
+
+    if [ "${attempt}" -eq 1 ] ; then
+        sudo bash -lc 'shopt -s nullglob; for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do [ -f "$f" ] || continue; sed -i "s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g; s|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g" "$f"; done'
+    fi
+
+    sleep $((attempt * 5))
+done
+
+if [ "${update_ok}" -ne 1 ] ; then
+    echo 'apt-get update failed after retries' >&2
+    exit 1
+fi
 
 while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 ; do
     echo 'Waiting for release of dpkg/apt locks'
@@ -43,9 +62,13 @@ if [ ! -d "$HOME/.asdf" ]; then
     git clone https://github.com/asdf-vm/asdf.git "$HOME/.asdf" --branch v0.14.0
 fi
 . "$HOME/.asdf/asdf.sh"
-asdf plugin-add direnv || status_code=$?
-if [ $status_code -ne 0 ] && [ $status_code -ne 2 ]; then
-    echo "Failed to add '$name' plugin to asdf" >&2
-    exit 1
+plugin_name='direnv'
+status_code=0
+if ! asdf plugin list | grep -qx "$plugin_name" ; then
+    asdf plugin add "$plugin_name" "https://github.com/asdf-community/asdf-direnv.git" || status_code=$?
+    if [ "$status_code" -ne 0 ]; then
+        echo "Failed to add '$plugin_name' plugin to asdf" >&2
+        exit 1
+    fi
 fi
 asdf direnv setup --shell bash --version system

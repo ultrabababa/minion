@@ -27,7 +27,8 @@ def analyze_results(filepath):
         sys.exit(1)
 
     # Initialize stats
-    total_txs = 0
+    planned_txs = 0
+    submitted_txs = 0
     committed = 0
     aborted = 0
     errors = 0
@@ -43,7 +44,7 @@ def analyze_results(filepath):
     for loc in data.get('Locations', []):
         for client in loc.get('Clients', []):
             for ix in client.get('Interactions', []):
-                total_txs += 1
+                planned_txs += 1
                 
                 # Times in results.json are actually in seconds (float)
                 submit_time = ix.get('SubmitTime', -1)
@@ -54,9 +55,11 @@ def analyze_results(filepath):
                 if has_error:
                     errors += 1
                     
-                # Throughput bucket (by second)
-                sec_bucket = int(submit_time)
-                txs_per_sec[sec_bucket] = txs_per_sec.get(sec_bucket, 0) + 1
+                if submit_time > 0:
+                    submitted_txs += 1
+                    # Throughput bucket (by second)
+                    sec_bucket = int(submit_time)
+                    txs_per_sec[sec_bucket] = txs_per_sec.get(sec_bucket, 0) + 1
                 
                 if commit_time > 0:
                     committed += 1
@@ -72,9 +75,10 @@ def analyze_results(filepath):
 
     # Calculate summaries
     print("=== SUMMARY ===")
-    print(f"Total Transactions: {total_txs}")
-    print(f"Committed:          {committed} ({(committed/total_txs*100) if total_txs else 0:.1f}%)")
-    print(f"Aborted:            {aborted} ({(aborted/total_txs*100) if total_txs else 0:.1f}%)")
+    print(f"Planned Interactions: {planned_txs}")
+    print(f"Submitted:            {submitted_txs} ({(submitted_txs/planned_txs*100) if planned_txs else 0:.1f}% of planned)")
+    print(f"Committed:            {committed} ({(committed/submitted_txs*100) if submitted_txs else 0:.1f}% of submitted, {(committed/planned_txs*100) if planned_txs else 0:.1f}% of planned)")
+    print(f"Aborted:              {aborted} ({(aborted/submitted_txs*100) if submitted_txs else 0:.1f}% of submitted, {(aborted/planned_txs*100) if planned_txs else 0:.1f}% of planned)")
     print(f"Errors:             {errors}")
     print("")
 

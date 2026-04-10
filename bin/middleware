@@ -246,7 +246,7 @@ sub benchmark_blockchain
 	close($fh);
     }
 
-	if (0) {
+	if (1) {
 
     $pgrp = Minion::System::Pgroup->new([]);
 
@@ -286,27 +286,48 @@ sub benchmark_blockchain
 	$pgrp->add($proc);
     }
 
+    my $chain_log_dir = $blockchain;
+    if ($chain_log_dir eq 'hotstuff-redundant') {
+	$chain_log_dir = 'hotstuff';
+    } elsif ($chain_log_dir eq 'asonnino-hotstuff-redundant') {
+	$chain_log_dir = 'asonnino-hotstuff';
+    }
+
     foreach $instance (@$chain) {
 	printf("saving node logs from %s in '%s' ...\n",
 		$instance->id(), $full);
 
 	$proc = $instance->recv(
-	    [ 'deploy/' . $blockchain . '/*/out' ],
+	    [ 'deploy/' . $chain_log_dir . '/*/out' ],
 	    TARGET => $full . '/chain-' . $instance->id() .
 	              '-out.log'
 	    );
 	$pgrp->add($proc);
 
 	$proc = $instance->recv(
-	    [ 'deploy/' . $blockchain . '/*/err' ],
+	    [ 'deploy/' . $chain_log_dir . '/*/err' ],
 	    TARGET => $full . '/chain-' . $instance->id() .
 	              '-err.log'
 	    );
-	$pgrp->add($proc);
+		$pgrp->add($proc);
 
-	if ($blockchain =~ /algorand/) {
 		$proc = $instance->recv(
-			[ 'deploy/' . $blockchain . '/*/node.log' ],
+		    [ 'deploy/diablo-observer/out' ],
+		    TARGET => $full . '/observer-' . $instance->id() .
+		              '-out.log'
+		    );
+		$pgrp->add($proc);
+
+		$proc = $instance->recv(
+		    [ 'deploy/diablo-observer/err' ],
+		    TARGET => $full . '/observer-' . $instance->id() .
+		              '-err.log'
+		    );
+		$pgrp->add($proc);
+
+	if ($chain_log_dir =~ /algorand/) {
+		$proc = $instance->recv(
+			[ 'deploy/' . $chain_log_dir . '/*/node.log' ],
 			TARGET => $full . '/chain-' . $instance->id() .
 					'-node.log'
 			);
@@ -353,6 +374,7 @@ sub benchmark_blockchain
 	    chdir($wd);
 	}
     }
+
 	# }
 
     return ($path . '/results.json');
@@ -360,7 +382,11 @@ sub benchmark_blockchain
 
 sub build
 {
-	my ($workers) = @_;
+	my ($workers, $chain_count) = @_;
+	$chain_count //= 10;
+	unlink('diablo-src.tar.gz');
+	unlink('hotstuff-src.tar.gz');
+	unlink('asonnino-hotstuff-src.tar.gz');
 
     my $builder = undef;
 
@@ -404,11 +430,22 @@ sub build
 	    fatal("failed to sync '%s'", $helper);
 	}
 
-    if (system("tar czhf diablo-src.tar.gz diablo/") != 0) {
+    if (system("tar --exclude='diablo/.git' -czhf diablo-src.tar.gz diablo/") != 0) {
         fatal("failed to create diablo-src.tar.gz");
     }
-    if (system("tar czhf hotstuff-src.tar.gz hotstuff/") != 0) {
+    if (system("tar --exclude='hotstuff/.git' -czhf hotstuff-src.tar.gz hotstuff/") != 0) {
         fatal("failed to create hotstuff-src.tar.gz");
+    }
+    if (-d '../asonnino-hotstuff') {
+        if (system("tar --exclude='asonnino-hotstuff/.git' -czhf asonnino-hotstuff-src.tar.gz -C .. asonnino-hotstuff/") != 0) {
+            fatal("failed to create asonnino-hotstuff-src.tar.gz");
+        }
+    } elsif (-d 'asonnino-hotstuff') {
+        if (system("tar --exclude='asonnino-hotstuff/.git' -czhf asonnino-hotstuff-src.tar.gz asonnino-hotstuff/") != 0) {
+            fatal("failed to create asonnino-hotstuff-src.tar.gz");
+        }
+    } else {
+        fatal("cannot find asonnino-hotstuff source directory");
     }
 
     if ($builder->send(['diablo-src.tar.gz'], TARGET => 'diablo-src.tar.gz')->wait() != 0) {
@@ -417,6 +454,13 @@ sub build
     if ($builder->send(['hotstuff-src.tar.gz'], TARGET => 'hotstuff-src.tar.gz')->wait() != 0) {
         fatal("failed to send hotstuff-src");
     }
+    if ($builder->send(['asonnino-hotstuff-src.tar.gz'], TARGET => 'asonnino-hotstuff-src.tar.gz')->wait() != 0) {
+        fatal("failed to send asonnino-hotstuff-src");
+    }
+
+	unlink('diablo-src.tar.gz');
+	unlink('hotstuff-src.tar.gz');
+	unlink('asonnino-hotstuff-src.tar.gz');
 
     if ($runner->run($builder, [ 'build-diablo' ])->wait() != 0) {
 	fatal("failed to build diablo");
@@ -432,6 +476,74 @@ sub build
     if ($builder->recv(['install/hotstuff.tar.gz'], TARGET => 'binaries/hotstuff.tar.gz' )->wait() != 0){
         fatal("failed to receive hotstuff");
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    $builder->execute([ 'bash', '-c', qq{echo "export NODE_COUNT=$chain_count" >> ~/.bashrc} ], STDERR => '/dev/null')->wait();
+        $builder->execute([ 'bash', '-c', qq{echo "export NODE_COUNT=$chain_count" >> helper} ], STDERR => '/dev/null')->wait();
+    if ($runner->run($builder, [ 'build-asonnino-hotstuff' ])->wait() != 0) {
+        fatal("failed to build asonnino-hotstuff");
+    }
+    if ($builder->recv(['install/asonnino-hotstuff.tar.gz'], TARGET => 'binaries/asonnino-hotstuff.tar.gz' )->wait() != 0){
+        fatal("failed to receive asonnino-hotstuff");
+    }
+
+	$builder->execute([ 'rm', '-f', 'diablo-src.tar.gz', 'hotstuff-src.tar.gz', 'asonnino-hotstuff-src.tar.gz' ], STDERR => '/dev/null')->wait();
+	$builder->execute([ 'rm', '-f', 'install/diablo.tar.gz', 'install/hotstuff.tar.gz', 'install/asonnino-hotstuff.tar.gz' ], STDERR => '/dev/null')->wait();
 
 #	if ($runner->run($builder, [ 'build-aptos' ])->wait() != 0) {
 #	fatal("failed to build aptos");
@@ -553,6 +665,20 @@ sub install
 
     install_archive($fleet, 'binaries/diablo.tar.gz', 'install/diablo');
     install_archive($fleet, 'binaries/hotstuff.tar.gz', 'install/hotstuff');
+    install_archive($fleet, 'binaries/asonnino-hotstuff.tar.gz', 'install/asonnino-hotstuff');
+
+	_wait_or_fatal(
+		$fleet->execute(['rm', '-f', 'asonnino-hotstuff-observer'], STDERRS => '/dev/null'),
+		"failed to cleanup old asonnino-hotstuff-observer"
+	);
+	_wait_or_fatal(
+		$fleet->send(['script/remote/asonnino-hotstuff-observer'], TARGETS => 'asonnino-hotstuff-observer'),
+		"failed to distribute asonnino-hotstuff-observer"
+	);
+	_wait_or_fatal(
+		$fleet->execute(['chmod', '+x', 'asonnino-hotstuff-observer']),
+		"failed to chmod asonnino-hotstuff-observer"
+	);
 #    install_archive($fleet, 'binaries/algorand.tar.gz', 'install/algorand');
 #    install_archive($fleet, 'binaries/algorand-tools.tar.gz', 'install/algorand/algorand-tools');
 #    install_archive($fleet, 'binaries/aptos.tar.gz', 'install/aptos');
@@ -746,7 +872,7 @@ sub main
     $workers = create_workers($setup);
 
 	if (!$skip_build) {
-	build($workers);
+	build($workers, $chain);
     }
 
     if (!$skip_install) {

@@ -1,0 +1,110 @@
+#!/bin/bash
+
+set -e
+
+if [ ! -f "$HOME/helper" ]; then
+    echo "Cannot find helper script" >&2
+    exit 1
+fi
+. "$HOME/helper"
+
+sudo apt-get update -y
+sudo apt-get install -y clang libclang-dev llvm-dev pkg-config build-essential cmake
+
+if [ ! -e 'install' ] ; then
+    mkdir 'install'
+fi
+
+rm -rf 'install/asonnino-hotstuff'
+rm -f 'install/asonnino-hotstuff.tar.gz'
+
+asdf_install rust 1.76.0
+
+mkdir -p 'install/asonnino-hotstuff'
+tar xzf ~/asonnino-hotstuff-src.tar.gz -C install/asonnino-hotstuff --strip-components=1
+
+(
+    cd 'install/asonnino-hotstuff'
+
+    if command -v ldconfig >/dev/null 2>&1; then
+        libclang_so=$(ldconfig -p | awk '/libclang\.so(\.|$)/ {print $NF; exit}')
+        if [ -n "$libclang_so" ]; then
+            export LIBCLANG_PATH
+            LIBCLANG_PATH=$(dirname "$libclang_so")
+        fi
+    fi
+
+    cargo build --release -p node --features benchmark
+
+    mkdir -p pack/config
+    cp target/release/node pack/node
+
+    NODE_COUNT=${NODE_COUNT:-10}
+
+    for i in $(seq 0 $((NODE_COUNT - 1))); do
+        ./target/release/node keys --filename "pack/config/node_${i}.json"
+    done
+
+    cat > pack/config/parameters.json <<'EOF'
+{
+  "consensus": {
+    "timeout_delay": 2000,
+    "sync_retry_delay": 10000
+  },
+  "mempool": {
+    "gc_depth": 50,
+    "sync_retry_delay": 5000,
+    "sync_retry_nodes": 3,
+    "batch_size": 15000,
+    "max_batch_delay": 10
+  }
+}
+EOF
+
+    python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+node_count = int(os.environ.get('NODE_COUNT', '10'))
+cfg_dir = Path('pack/config')
+ips = [f"10.30.10.{i}" for i in range(1, node_count + 1)]
+
+names = []
+for i in range(node_count):
+    with (cfg_dir / f'node_{i}.json').open() as f:
+        names.append(json.load(f)['name'])
+
+consensus = {}
+mempool = {}
+for i, (name, ip) in enumerate(zip(names, ips)):
+    consensus[name] = {
+        'name': name,
+        'stake': 1,
+        'address': f'{ip}:{25200 + i}'
+    }
+    mempool[name] = {
+        'name': name,
+        'stake': 1,
+        'transactions_address': f'{ip}:{25000 + i}',
+        'mempool_address': f'{ip}:{25100 + i}'
+    }
+
+committee = {
+    'consensus': {
+        'authorities': consensus,
+        'epoch': 1
+    },
+    'mempool': {
+        'authorities': mempool,
+        'epoch': 1
+    }
+}
+
+with (cfg_dir / 'committee.json').open('w') as f:
+    json.dump(committee, f, indent=2, sort_keys=True)
+    f.write('\n')
+PY
+
+    tar czf ../asonnino-hotstuff.tar.gz --transform 's,^,asonnino-hotstuff/,' -C pack node config
+)

@@ -5,3 +5,22 @@ Makefile
 Makefile.old
 blib/
 pm_to_blib
+
+# Cache and logs
+__pycache__/
+*.log
+*.tmp
+*.bak
+
+# Data and results
+results/
+*.results/
+*.results.tar.gz
+*.png
+
+# Working directories and submodules downloaded by Minion
+minion.*/
+binaries/
+diablo
+hotstuff
+asonnino-hotstuff

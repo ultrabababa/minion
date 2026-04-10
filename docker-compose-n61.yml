@@ -1,0 +1,375 @@
+networks:
+  stabl_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.30.0.0/16
+
+x-node: &node
+  image: stabl-node
+  build:
+    context: .
+    dockerfile: Dockerfile
+  cap_add:
+    - NET_ADMIN
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  builder:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.30.2
+  chain1:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.1
+  chain2:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.2
+  chain3:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.3
+  chain4:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.4
+  chain5:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.5
+  chain6:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.6
+  chain7:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.7
+  chain8:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.8
+  chain9:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.9
+  chain10:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.10
+  chain11:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.11
+  chain12:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.12
+  chain13:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.13
+  chain14:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.14
+  chain15:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.15
+  chain16:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.16
+  chain17:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.17
+  chain18:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.18
+  chain19:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.19
+  chain20:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.20
+  chain21:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.21
+  chain22:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.22
+  chain23:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.23
+  chain24:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.24
+  chain25:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.25
+  chain26:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.26
+  chain27:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.27
+  chain28:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.28
+  chain29:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.29
+  chain30:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.30
+  chain31:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.31
+  chain32:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.32
+  chain33:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.33
+  chain34:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.34
+  chain35:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.35
+  chain36:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.36
+  chain37:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.37
+  chain38:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.38
+  chain39:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.39
+  chain40:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.40
+  chain41:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.41
+  chain42:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.42
+  chain43:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.43
+  chain44:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.44
+  chain45:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.45
+  chain46:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.46
+  chain47:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.47
+  chain48:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.48
+  chain49:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.49
+  chain50:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.50
+  chain51:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.51
+  chain52:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.52
+  chain53:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.53
+  chain54:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.54
+  chain55:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.55
+  chain56:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.56
+  chain57:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.57
+  chain58:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.58
+  chain59:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.59
+  chain60:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.60
+  chain61:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.10.61
+  client1:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.20.1
+  client2:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.20.2
+  client3:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.20.3
+  client4:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.20.4
+  client5:
+    <<: *node
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.20.5
+
+  runner:
+    image: stabl-runner
+    build:
+      context: .
+      dockerfile: Dockerfile.runner
+    networks:
+      stabl_net:
+        ipv4_address: 10.30.40.1
+    volumes:
+      - ../:/project
+    working_dir: /project
+    user: ubuntu
+    command: tail -f /dev/null
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

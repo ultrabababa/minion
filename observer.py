@@ -26,7 +26,7 @@ def call_script(script: str, action: str, nodes: list[int]):
 
 def node_ip(blockchain: str, n: int) -> str:
 	"""Return the IP address for 0-indexed node n of the given blockchain."""
-	if blockchain == "hotstuff":
+	if blockchain.startswith("hotstuff") or blockchain.startswith("asonnino-hotstuff"):
 		# HotStuff nodes: 10.30.10.1 through 10.30.10.10
 		return f"10.30.10.{n + 1}"
 	else:
@@ -76,7 +76,14 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 
 	blockchain = Path(script).name
 
-	nodes = [int(x.name.removeprefix("n")) for x in (Path.home() / "deploy" / blockchain).iterdir() if x.is_dir() and x.name.startswith("n")]
+	# redundant interfaces share deploy directories with their base chain.
+	if blockchain.startswith("hotstuff"):
+		deploy_blockchain = "hotstuff"
+	elif blockchain.startswith("asonnino-hotstuff"):
+		deploy_blockchain = "asonnino-hotstuff"
+	else:
+		deploy_blockchain = blockchain
+	nodes = [int(x.name.removeprefix("n")) for x in (Path.home() / "deploy" / deploy_blockchain).iterdir() if x.is_dir() and x.name.startswith("n")]
 	if len(nodes) != 1:
 		sys.exit(1)
 	node = nodes[0]
@@ -89,20 +96,20 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 	(duration,) = struct.unpack('<d', msg)
 	print(f'received duration {duration}')
 	now = time.monotonic()
-	middle = 200
-	downtime = 400 / 3
+	fault_at = duration / 6.0
+	recovery_at = duration / 3.0
+	print(f'fault_at={fault_at:.1f}s recovery_at={recovery_at:.1f}s')
 
 	match mode:
 		case Mode.crash:
-			s.enterabs(now + middle - downtime / 2, 0, call_script, (script, "kill", list(range(nodenum - failures, nodenum)),))
-			s.enterabs(now + middle + downtime / 2, 0, call_script, (script, "start", list(range(nodenum - failures, nodenum)),))
+			s.enterabs(now + fault_at, 0, call_script, (script, "kill", list(range(nodenum - failures, nodenum)),))
+			s.enterabs(now + recovery_at, 0, call_script, (script, "start", list(range(nodenum - failures, nodenum)),))
 		case Mode.crash_no_recovery:
-			s.enterabs(now + middle - downtime / 2, 0, call_script, (script, "kill", list(range(nodenum - failures, nodenum)),))
+			s.enterabs(now + fault_at, 0, call_script, (script, "kill", list(range(nodenum - failures, nodenum)),))
 		case Mode.partition:
 			s.enterabs(now, 0, lambda: subprocess.run(shlex.split("sudo ethtool -K eth0 tso off gso off gro off sg off")))
-			s.enterabs(now + middle - downtime / 2, 0, start_loss, (nodenum, node, failures, blockchain,))
-			s.enterabs(now + middle + downtime / 2, 0, stop_loss)
-			s.enterabs(now + duration, 0, lambda: subprocess.run(shlex.split("sudo ethtool -K eth0 tso on gso on gro on sg on")))
+			s.enterabs(now + fault_at, 0, start_loss, (nodenum, node, failures, blockchain,))
+			s.enterabs(now + recovery_at, 0, stop_loss)
 		case Mode.none:
 			pass
 

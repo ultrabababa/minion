@@ -52,6 +52,8 @@ my $SOLANA_PATH = $SHARED . '/solana';
 my $AVALANCHE_PATH = $SHARED . '/avalanche';
 my $SEVM_PATH = $SHARED . '/sevm';
 my $HOTSTUFF_PATH = $SHARED . '/hotstuff';
+my $ASONNINO_HOTSTUFF_PATH = $SHARED . '/asonnino-hotstuff';
+my $ASONNINO_HOTSTUFF_REDUNDANT_PATH = $SHARED . '/asonnino-hotstuff-redundant';
 
 my $DIABLO_OBSERVER_PATH = $SHARED . '/diablo-observer';
 my $DIABLO_OBSERVER_ROLES_PATH = $DIABLO_OBSERVER_PATH . '/behaviors.txt';
@@ -395,6 +397,14 @@ sub deploy_diablo
 	return deploy_diablo_hotstuff($nodes);
     }
 
+    if (-f ($ASONNINO_HOTSTUFF_REDUNDANT_PATH . '/setup.yaml')) {
+	return deploy_diablo_asonnino_hotstuff_redundant($nodes);
+    }
+
+    if (-f ($ASONNINO_HOTSTUFF_PATH . '/setup.yaml')) {
+	return deploy_diablo_asonnino_hotstuff($nodes);
+    }
+
 
     return 1;
 }
@@ -410,6 +420,30 @@ sub deploy_diablo_hotstuff
                  keys(%$nodes);
 
     return deploy_diablo_primary($primary, $HOTSTUFF_PATH);
+}
+
+sub deploy_diablo_asonnino_hotstuff
+{
+    my ($nodes) = @_;
+    my ($primary);
+
+    ($primary) = map { $nodes->{$_}->{'worker'} }
+                 grep { $nodes->{$_}->{'primary'} > 0 }
+                 keys(%$nodes);
+
+    return deploy_diablo_primary($primary, $ASONNINO_HOTSTUFF_PATH);
+}
+
+sub deploy_diablo_asonnino_hotstuff_redundant
+{
+    my ($nodes) = @_;
+    my ($primary);
+
+    ($primary) = map { $nodes->{$_}->{'worker'} }
+                 grep { $nodes->{$_}->{'primary'} > 0 }
+                 keys(%$nodes);
+
+    return deploy_diablo_primary($primary, $ASONNINO_HOTSTUFF_REDUNDANT_PATH);
 }
 
 

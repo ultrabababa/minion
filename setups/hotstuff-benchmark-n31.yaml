@@ -1,4 +1,4 @@
-name: "HotStuff Fault Injection Benchmark"
+name: "HotStuff Fault Injection Benchmark (N=${N})"
 description: "800-second benchmark for HotStuff with STABL fault injection (200 TPS total)"
 secondaries: 5
 threads: 2

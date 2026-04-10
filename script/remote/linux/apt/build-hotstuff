@@ -2,6 +2,7 @@
 set -e
 mkdir -p install/hotstuff
 rm -rf install/hotstuff/*
+rm -f install/hotstuff.tar.gz
 . "$HOME/helper"
 asdf_install golang 1.22.2
 tar xzf ~/hotstuff-src.tar.gz -C install/hotstuff --strip-components=1

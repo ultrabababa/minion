@@ -1,28 +1,20 @@
 #!/bin/bash
 #
-#   hotstuff - run hotstuff on a worker node
-#
-#   Actions: deploy, start, stop, kill
-#   The kill and start actions accept optional 0-indexed node indices as
-#   arguments (matching the observer.py convention used by STABL).
-#   Each worker maps its IP octet to a 0-based index: index = octet - 1.
+#   asonnino-hotstuff-redundant - STABL wrapper for asonnino hotstuff chain role
 #
 
 set -e
 
-script_name='hotstuff'
-install_root="${HOME}/install/hotstuff"
-deploy_root="${HOME}/deploy/hotstuff"
+script_name='asonnino-hotstuff-redundant'
+install_root="${HOME}/install/asonnino-hotstuff"
+deploy_root="${HOME}/deploy/asonnino-hotstuff"
 
-# Determine the 1-based node ID from the IP last octet (10.30.10.x => x).
-# The hotstuff binary uses 1-based IDs (--id flag).
-# The 0-based observer index = node_id - 1.
 local_ip_init=$(hostname -I | awk '{print $1}')
 node_id=$(echo "${local_ip_init}" | awk -F. '{print $4}')
 node_index=$((node_id - 1))
 node_root="${deploy_root}/n${node_index}"
+bridge_port=$((26000 + node_index))
 
-# Utility functions
 fatal() {
     local msg="$1" ; shift
     exec >&2
@@ -32,32 +24,32 @@ fatal() {
 
 deploy() {
     mkdir -p "${node_root}"
+    rm -rf "${node_root}/store"
     : > "${node_root}/out"
     : > "${node_root}/err"
-    # No complex keys generation here anymore, the server binary handles deterministic keys.
+    : > "${node_root}/bridge.out"
+    : > "${node_root}/bridge.err"
 }
 
-# _start_node starts the hotstuff process in the local node directory.
 _start_node() {
     local dir="$1"
     [ -d "${dir}" ] || return 0
 
     cd "${dir}"
 
-    # Dynamically find the number of nodes from the setup file or fall back to local count
-    local count=10
-    if [ -f "$HOME/setup.yaml" ]; then
-        count=$(grep -A 100 'endpoints:' "$HOME/setup.yaml" | grep -c '10\.30\.10\.')
-    fi
-    if [ "$count" -eq 0 ]; then
-        count=$(ls -1d ${HOME}/deploy/hotstuff/n* 2>/dev/null | wc -l)
-        [ "$count" -eq 0 ] && count=10
-    fi
-    
-    local ips=$(printf '10.30.10.%s,' $(seq 1 $count) | sed 's/,$//')
-
-    nohup "${install_root}/hotstuff" server --id "${node_id}" --ips "${ips}" --log-level warn > out 2> err < /dev/null &
+    nohup "${install_root}/node" -vv run \
+        --keys "${install_root}/config/node_${node_index}.json" \
+        --committee "${install_root}/config/committee.json" \
+        --parameters "${install_root}/config/parameters.json" \
+        --store "${node_root}/store" \
+        > out 2> err < /dev/null &
     echo $! > hotstuff.pid
+
+    nohup "${HOME}/asonnino-hotstuff-observer" \
+        --log "${dir}/err" \
+        --port "${bridge_port}" \
+        > bridge.out 2> bridge.err < /dev/null &
+    echo $! > bridge.pid
 }
 
 start() {
@@ -75,7 +67,6 @@ start() {
     done
 }
 
-# _kill sends a signal to the hotstuff process, with fallback to SIGKILL.
 _kill() {
     local sig="$1" ; shift
     local dir pid dead dirs
@@ -112,6 +103,17 @@ _kill() {
         fi
 
         rm -f "${dir}/hotstuff.pid"
+
+        if [ -f "${dir}/bridge.pid" ] ; then
+            local bpid
+            bpid="$(cat "${dir}/bridge.pid")"
+            if echo "${bpid}" | grep -Pq '^\d+$' ; then
+                kill "${sig}" ${bpid} 2> '/dev/null' || true
+                sleep 1
+                kill -KILL ${bpid} 2> '/dev/null' || true
+            fi
+            rm -f "${dir}/bridge.pid"
+        fi
     done
 }
 
@@ -121,7 +123,8 @@ nkill() {
 
 stop() {
     _kill -INT "$@"
-    pkill -9 hotstuff 2>/dev/null || true
+    pkill -9 node 2>/dev/null || true
+    pkill -f asonnino-hotstuff-observer 2>/dev/null || true
 }
 
 if [ $# -lt 1 ] ; then

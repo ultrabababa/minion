@@ -95,7 +95,7 @@ start_primary() {
     set -x
 	ulimit -n 65535
     diablo primary \
-	   -vvv \
+	   -v \
 	   --env="accounts=${dir}/accounts.yaml" \
 	   --env="contracts=${install_root}/move-contracts" \
 	   --env="contracts=${install_root}/teal-contracts" \
@@ -201,7 +201,7 @@ start_secondary() {
 		set -x
 		ulimit -n 65535
 		diablo secondary \
-				-vvv \
+				-v \
 				--tag="${region}" \
 				--port=${port} \
 				${ip} \

@@ -1,9 +1,8 @@
-package deploy_hotstuff;
+package deploy_asonnino_hotstuff_redundant;
 
 use strict;
 use warnings;
 use File::Path qw(make_path);
-use File::Basename;
 
 my $FLEET = $_;
 my %PARAMS = @_;
@@ -12,60 +11,53 @@ my $RUNNER = $PARAMS{RUNNER};
 my ($action, $redundancy, @err) = @ARGV;
 $redundancy //= 1;
 
-sub deploy_hotstuff
-{
-    my @hotstuff_ips = ();
+sub deploy_asonnino_hotstuff_redundant {
+    my @ips = ();
     foreach my $worker ($FLEET->members()) {
         my $ip = $worker->can('public_ip') ? $worker->public_ip() : $worker->host();
         if ($ip =~ /^10\.30\.10\.\d+$/) {
-            push(@hotstuff_ips, $ip);
+            push(@ips, $ip);
         }
     }
-    @hotstuff_ips = sort { 
+    @ips = sort { 
         my ($a_end) = $a =~ /\.([^.]+)$/; 
         my ($b_end) = $b =~ /\.([^.]+)$/; 
         $a_end <=> $b_end 
-    } @hotstuff_ips;
+    } @ips;
 
     my @workers;
     foreach my $worker ($FLEET->members()) {
         my $ip = $worker->can('public_ip') ? $worker->public_ip() : $worker->host();
-        if (grep { $_ eq $ip } @hotstuff_ips) {
+        if (grep { $_ eq $ip } @ips) {
             push(@workers, $worker);
         }
     }
 
-    if (scalar(@workers) > 0) {
-        my $proc = $RUNNER->run(\@workers, [ 'hotstuff', 'deploy' ]);
+    if (@workers) {
+        my $proc = $RUNNER->run(\@workers, [ 'asonnino-hotstuff', 'deploy' ]);
         if ($proc->wait() != 0) {
-            die ("failed to deploy hotstuff on remote nodes");
+            die ("failed to deploy asonnino-hotstuff on remote nodes");
         }
     }
 
-    # Generate setup.yaml for Diablo
     my $SHARED = $ENV{MINION_SHARED} || '/tmp/minion_shared';
-    my $setup_dir = "$SHARED/hotstuff";
+    my $setup_dir = "$SHARED/asonnino-hotstuff-redundant";
     make_path($setup_dir) unless -d $setup_dir;
-    
+
     my $setup_file = "$setup_dir/setup.yaml";
     open(my $fh, '>', $setup_file) or die "Cannot open $setup_file: $!";
-    
-    my $iface = ($action eq 'deploy-hotstuff-redundant') ? 'hotstuff-redundant' : 'hotstuff';
-    print $fh "interface: \"$iface\"\n";
-    if ($action eq 'deploy-hotstuff-redundant') {
-        print $fh "\n";
-        print $fh "parameters:\n";
-        printf $fh "  redundancy: %d\n", $redundancy;
-    }
-    print $fh "\n";
-    print $fh "endpoints:\n";
-    print $fh "\n";
+
+    print $fh "interface: \"asonnino-hotstuff-redundant\"\n\n";
+    print $fh "parameters:\n";
+    printf $fh "  redundancy: %d\n\n", $redundancy;
+    print $fh "  client_inflight: 512\n\n";
+    print $fh "endpoints:\n\n";
     print $fh "  - addresses:\n";
-    foreach my $ip (@hotstuff_ips) {
+    foreach my $ip (@ips) {
         print $fh "    - $ip\n";
     }
     print $fh "    tags:\n";
-    foreach my $ip (@hotstuff_ips) {
+    foreach my $ip (@ips) {
         print $fh "    - $ip\n";
     }
     close($fh);
@@ -73,5 +65,5 @@ sub deploy_hotstuff
     return 1;
 }
 
-deploy_hotstuff();
+deploy_asonnino_hotstuff_redundant();
 __END__

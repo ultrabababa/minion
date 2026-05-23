@@ -1,0 +1,166 @@
+#!/bin/bash
+#
+#   asonnino-hotstuff - STABL wrapper for asonnino hotstuff chain role
+#
+
+set -e
+
+script_name='asonnino-hotstuff'
+install_root="${HOME}/install/asonnino-hotstuff"
+deploy_root="${HOME}/deploy/asonnino-hotstuff"
+
+local_ip_init=$(hostname -I | awk '{print $1}')
+node_id=$(echo "${local_ip_init}" | awk -F. '{print $4}')
+node_index=$((node_id - 1))
+node_root="${deploy_root}/n${node_index}"
+bridge_port=$((26000 + node_index))
+
+fatal() {
+    local msg="$1" ; shift
+    exec >&2
+    echo "${script_name}: ${msg}"
+    exit 1
+}
+
+deploy() {
+    mkdir -p "${node_root}"
+    rm -rf "${node_root}/store"
+    : > "${node_root}/out"
+    : > "${node_root}/err"
+    : > "${node_root}/bridge.out"
+    : > "${node_root}/bridge.err"
+}
+
+_start_node() {
+    local dir="$1"
+    [ -d "${dir}" ] || return 0
+
+    pkill -f "${install_root}/node -vv run --keys ${install_root}/config/node_${node_index}.json" 2>/dev/null || true
+    pkill -f "asonnino-hotstuff-observer.*--port ${bridge_port}" 2>/dev/null || true
+
+    # Silent-leader Byzantine: BYZANTINE_NODES env is a comma-separated
+    # list of node indices that should run with --byzantine. Empty list
+    # (or unset) preserves baseline honest behavior.
+    local byzantine_arg=""
+    if [ -n "${BYZANTINE_NODES:-}" ]; then
+        if echo ",${BYZANTINE_NODES}," | grep -q ",${node_index},"; then
+            byzantine_arg="--byzantine"
+        fi
+    fi
+
+    cd "${dir}"
+
+    nohup "${install_root}/node" -vv run \
+        --keys "${install_root}/config/node_${node_index}.json" \
+        --committee "${install_root}/config/committee.json" \
+        --parameters "${install_root}/config/parameters.json" \
+        --store "${node_root}/store" \
+        ${byzantine_arg} \
+        > out 2> err < /dev/null &
+    echo $! > hotstuff.pid
+
+    nohup "${HOME}/asonnino-hotstuff-observer" \
+        --log "${dir}/err" \
+        --port "${bridge_port}" \
+        > bridge.out 2> bridge.err < /dev/null &
+    echo $! > bridge.pid
+}
+
+start() {
+    local dirs
+
+    dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+        dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
+        if [ -d "${dir}" ] ; then
+            _start_node "${dir}"
+        fi
+    done
+}
+
+_kill() {
+    local sig="$1" ; shift
+    local dir pid dead dirs
+
+    dirs=("${deploy_root}/n"*)
+    if [ $# -gt 0 ] ; then
+        dirs=("${@/#/${deploy_root}/n}")
+    fi
+
+    for dir in "${dirs[@]}" ; do
+        if [ ! -d "${dir}" ] ; then
+            continue
+        elif [ ! -f "${dir}/hotstuff.pid" ] ; then
+            continue
+        fi
+
+        pid="$(cat "${dir}/hotstuff.pid")"
+
+        if echo "${pid}" | grep -Pq '^\d+$' ; then
+            kill "${sig}" ${pid} 2> '/dev/null' || true
+        fi
+
+        dead=0
+        for i in $(seq 1 5) ; do
+            if ! ps ${pid} > '/dev/null' 2>&1 ; then
+                dead=1
+                break
+            fi
+            sleep 1
+        done
+
+        if [ ${dead} -eq 0 ] ; then
+            kill -KILL ${pid} 2> '/dev/null' || true
+        fi
+
+        rm -f "${dir}/hotstuff.pid"
+
+        if [ -f "${dir}/bridge.pid" ] ; then
+            local bpid
+            bpid="$(cat "${dir}/bridge.pid")"
+            if echo "${bpid}" | grep -Pq '^\d+$' ; then
+                kill "${sig}" ${bpid} 2> '/dev/null' || true
+                sleep 1
+                kill -KILL ${bpid} 2> '/dev/null' || true
+            fi
+            rm -f "${dir}/bridge.pid"
+        fi
+    done
+}
+
+nkill() {
+    _kill -KILL "$@"
+}
+
+stop() {
+    _kill -INT "$@"
+    pkill -9 node 2>/dev/null || true
+    pkill -f asonnino-hotstuff-observer 2>/dev/null || true
+}
+
+if [ $# -lt 1 ] ; then
+    fatal "missing action operand"
+fi
+
+action="$1" ; shift
+
+case "${action}" in
+    'deploy')
+        deploy "$@"
+        ;;
+    'start')
+        start "$@"
+        ;;
+    'stop')
+        stop "$@"
+        ;;
+    'kill')
+        nkill "$@"
+        ;;
+    *)
+        fatal "unknown action: '${action}'"
+        ;;
+esac

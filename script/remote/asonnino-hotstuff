@@ -38,12 +38,26 @@ _start_node() {
     pkill -f "${install_root}/node -vv run --keys ${install_root}/config/node_${node_index}.json" 2>/dev/null || true
     pkill -f "asonnino-hotstuff-observer.*--port ${bridge_port}" 2>/dev/null || true
 
-    # Silent-leader Byzantine: BYZANTINE_NODES env is a comma-separated
-    # list of node indices that should run with --byzantine. Empty list
-    # (or unset) preserves baseline honest behavior.
-    local byzantine_arg=""
+    # Silent-leader Byzantine: 优先级 (1) BYZANTINE_NODES env (但 Minion 不
+    # 转发 SSH env-var，本地 export 通常无效) → (2) 本地 byzantine.conf 文件
+    # → (3) 硬编码 fallback。修这个 fallback 即可控制实验。
+    #
+    # 跑 silent-leader 实验：保持下面 BYZANTINE_NODES_FALLBACK="7,8,9"
+    # 跑 baseline 实验：把下面这行改成 BYZANTINE_NODES_FALLBACK=""
+    local BYZANTINE_NODES_FALLBACK="7,8,9"
+
+    local _byz=""
     if [ -n "${BYZANTINE_NODES:-}" ]; then
-        if echo ",${BYZANTINE_NODES}," | grep -q ",${node_index},"; then
+        _byz="${BYZANTINE_NODES}"
+    elif [ -f "${HOME}/byzantine.conf" ]; then
+        _byz=$(cat "${HOME}/byzantine.conf" 2>/dev/null | tr -d '[:space:]')
+    else
+        _byz="${BYZANTINE_NODES_FALLBACK}"
+    fi
+
+    local byzantine_arg=""
+    if [ -n "${_byz}" ]; then
+        if echo ",${_byz}," | grep -q ",${node_index},"; then
             byzantine_arg="--byzantine"
         fi
     fi

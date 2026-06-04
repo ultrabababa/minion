@@ -5,6 +5,18 @@
 
 set -e
 
+load_env_file() {
+    local file="$1"
+
+    if [ -f "$file" ]; then
+        set -a
+        . "$file"
+        set +a
+    fi
+}
+
+load_env_file /etc/environment
+load_env_file "$HOME/.minion-env"
 
 if ! command -v 'sudo' > '/dev/null' ; then
     echo "Cannot find command 'sudo'" >&2

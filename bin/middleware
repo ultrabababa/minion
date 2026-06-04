@@ -466,22 +466,37 @@ sub build
 	    fatal("failed to sync '%s'", $helper);
 	}
 
-    if (system("tar --exclude='diablo/.git' -czhf diablo-src.tar.gz diablo/") != 0) {
+    my %srcdirs = (
+	diablo => undef,
+	hotstuff => undef,
+	'asonnino-hotstuff' => undef,
+    );
+    foreach my $name (keys(%srcdirs)) {
+	foreach my $parent ('.', '..') {
+	    my $candidate = "$parent/$name";
+	    if (-d $candidate) {
+		$srcdirs{$name} = [ $parent, $name ];
+		last;
+	    }
+	}
+	if (!defined($srcdirs{$name})) {
+	    fatal("cannot find %s source directory", $name);
+	}
+    }
+
+    if (system('tar', "--exclude=diablo/.git", '-czhf', 'diablo-src.tar.gz',
+	       '-C', $srcdirs{diablo}->[0], $srcdirs{diablo}->[1]) != 0) {
         fatal("failed to create diablo-src.tar.gz");
     }
-    if (system("tar --exclude='hotstuff/.git' -czhf hotstuff-src.tar.gz hotstuff/") != 0) {
+    if (system('tar', "--exclude=hotstuff/.git", '-czhf', 'hotstuff-src.tar.gz',
+	       '-C', $srcdirs{hotstuff}->[0], $srcdirs{hotstuff}->[1]) != 0) {
         fatal("failed to create hotstuff-src.tar.gz");
     }
-    if (-d '../asonnino-hotstuff') {
-        if (system("tar --exclude='asonnino-hotstuff/.git' -czhf asonnino-hotstuff-src.tar.gz -C .. asonnino-hotstuff/") != 0) {
-            fatal("failed to create asonnino-hotstuff-src.tar.gz");
-        }
-    } elsif (-d 'asonnino-hotstuff') {
-        if (system("tar --exclude='asonnino-hotstuff/.git' -czhf asonnino-hotstuff-src.tar.gz asonnino-hotstuff/") != 0) {
-            fatal("failed to create asonnino-hotstuff-src.tar.gz");
-        }
-    } else {
-        fatal("cannot find asonnino-hotstuff source directory");
+    if (system('tar', "--exclude=asonnino-hotstuff/.git", '-czhf',
+	       'asonnino-hotstuff-src.tar.gz', '-C',
+	       $srcdirs{'asonnino-hotstuff'}->[0],
+	       $srcdirs{'asonnino-hotstuff'}->[1]) != 0) {
+        fatal("failed to create asonnino-hotstuff-src.tar.gz");
     }
 
     if ($builder->send(['diablo-src.tar.gz'], TARGET => 'diablo-src.tar.gz')->wait() != 0) {

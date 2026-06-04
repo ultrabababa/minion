@@ -517,7 +517,7 @@ sub build
 	fatal("failed to build diablo");
     }
 
-	if ($builder->recv(['install/diablo.tar.gz'], TARGET => 'binaries/' )->wait() != 0){
+	if ($builder->recv(['install/diablo.tar.gz'], TARGET => 'binaries/diablo.tar.gz' )->wait() != 0){
 		fatal("failed to receive diablo")
 	}
 

@@ -21,7 +21,7 @@ if [ ! -f "$HOME/helper" ]; then
 fi
 . "$HOME/helper"
 
-golang_version='1.22.2'
+golang_version='1.25.6'
 
 diablo_url="https://github.com/lebdron/diablo-benchmark.git"
 diablo_checkout='e42cd0f5925e7d4c665c51effb1b60a3ec68021b'

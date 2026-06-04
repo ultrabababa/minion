@@ -58,14 +58,34 @@ done
 
 sudo -n apt-get -o DPkg::Lock::Timeout=1200 install -yy 'psmisc' 'build-essential' 'direnv' 'git' 'curl'
 
-if [ ! -d "$HOME/.asdf" ]; then
-    git clone https://github.com/asdf-vm/asdf.git "$HOME/.asdf" --branch v0.14.0
+clone_asdf() {
+    for attempt in 1 2 3 4 5 ; do
+        rm -rf "$HOME/.asdf"
+        if git -c http.version=HTTP/1.1 clone --depth 1 --branch v0.14.0 https://github.com/asdf-vm/asdf.git "$HOME/.asdf" ; then
+            return 0
+        fi
+        sleep $((attempt * 5))
+    done
+
+    echo 'failed to clone asdf after retries' >&2
+    return 1
+}
+
+if [ ! -f "$HOME/.asdf/asdf.sh" ]; then
+    clone_asdf
 fi
 . "$HOME/.asdf/asdf.sh"
 plugin_name='direnv'
 status_code=0
 if ! asdf plugin list | grep -qx "$plugin_name" ; then
-    asdf plugin add "$plugin_name" "https://github.com/asdf-community/asdf-direnv.git" || status_code=$?
+    for attempt in 1 2 3 4 5 ; do
+        if asdf plugin add "$plugin_name" "https://github.com/asdf-community/asdf-direnv.git" ; then
+            status_code=0
+            break
+        fi
+        status_code=$?
+        sleep $((attempt * 5))
+    done
     if [ "$status_code" -ne 0 ]; then
         echo "Failed to add '$plugin_name' plugin to asdf" >&2
         exit 1

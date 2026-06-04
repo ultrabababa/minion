@@ -11,7 +11,7 @@ import matplotlib as mpl
 import numpy as np
 
 BASELINE_COLOR = '#0F5298'
-ALTERED_COLOR = '#85C0F9'
+ALTERED_COLOR = '#E76F51'
 
 mpl.rcParams['font.family'] = 'serif'
 mpl.rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif', 'Bitstream Vera Serif']
@@ -303,7 +303,10 @@ def plot_mode(search_dir, records, mode, family, window_size, step_size, warmup_
         lf, lr = add_fault_recovery_lines(ax, duration, warmup_skip, has_recovery)
         ax.set_title(_make_setup_subtitle(mode, f, 1, n_nodes), fontsize=11, pad=8)
         _format_axes(ax, duration, warmup_skip, log_y)
-        fig.legend([lb, la, lf, lr], ['baseline', f'altered (f={f})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=4, frameon=False, fontsize=11)
+        if has_recovery:
+            fig.legend([lb, la, lf, lr], ['baseline', f'byzantine (f={f})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=4, frameon=False, fontsize=11)
+        else:
+            fig.legend([lb, la, lf], ['baseline', f'byzantine (f={f})', 'failures'], loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, frameon=False, fontsize=11)
         plt.tight_layout(rect=(0, 0, 1, 0.92))
         out = os.path.join(search_dir, f'plot_{mode}_f{f}.png')
         plt.savefig(out, dpi=300, bbox_inches='tight')
@@ -333,7 +336,10 @@ def plot_mode(search_dir, records, mode, family, window_size, step_size, warmup_
             axes[j].axis('off')
 
         if h1 is not None and h2 is not None and h3 is not None and h4 is not None:
-            fig.legend([h1, h2, h3, h4], ['baseline', f'altered ({mode})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=4, frameon=False, fontsize=12)
+            if has_recovery:
+                fig.legend([h1, h2, h3, h4], ['baseline', f'byzantine ({mode})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=4, frameon=False, fontsize=12)
+            else:
+                fig.legend([h1, h2, h3], ['baseline', f'byzantine ({mode})', 'failures'], loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=3, frameon=False, fontsize=12)
         fig.suptitle(_make_setup_subtitle(mode, ordered[0] if ordered else 0, 1, n_nodes), fontsize=11, y=1.02, color='#555555', style='italic')
         plt.tight_layout(rect=(0, 0, 1, 0.95))
         out = os.path.join(search_dir, f'plot_{mode}_f_all.png')
@@ -348,7 +354,7 @@ def plot_mode(search_dir, records, mode, family, window_size, step_size, warmup_
             alt_prog_t, alt_prog = analyze_commit_progress(alt_data, step_size=step_size, warmup_skip=warmup_skip)
             fig, ax = plt.subplots(figsize=(8, 4))
             p1, = ax.plot(base_prog_t, base_prog, color=BASELINE_COLOR, linewidth=1.0, alpha=0.9, label='baseline')
-            p2, = ax.plot(alt_prog_t, alt_prog, color=ALTERED_COLOR, linewidth=1.0, alpha=0.95, label=f'altered (f={f})')
+            p2, = ax.plot(alt_prog_t, alt_prog, color=ALTERED_COLOR, linewidth=1.0, alpha=0.95, label=f'byzantine (f={f})')
             p3, p4 = add_fault_recovery_lines(ax, duration, warmup_skip, has_recovery)
             ax.set_title(_make_setup_subtitle(mode, f, 1, n_nodes), fontsize=11, pad=8)
             ax.yaxis.grid(True, color='lightgray', linestyle='-')
@@ -360,7 +366,10 @@ def plot_mode(search_dir, records, mode, family, window_size, step_size, warmup_
             ax.set_xticklabels(labels)
             ax.set_ylabel('Cumulative Commits', fontsize=12)
             ax.set_xlabel('Time (s)', fontsize=12)
-            fig.legend([p1, p2, p3, p4], ['baseline', f'altered (f={f})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=4, frameon=False, fontsize=11)
+            if has_recovery:
+                fig.legend([p1, p2, p3, p4], ['baseline', f'byzantine (f={f})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=4, frameon=False, fontsize=11)
+            else:
+                fig.legend([p1, p2, p3], ['baseline', f'byzantine (f={f})', 'failures'], loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, frameon=False, fontsize=11)
             plt.tight_layout(rect=(0, 0, 1, 0.92))
             out = os.path.join(search_dir, f'commit_progress_{mode}_f{f}.png')
             plt.savefig(out, dpi=300, bbox_inches='tight')
@@ -395,7 +404,10 @@ def plot_mode(search_dir, records, mode, family, window_size, step_size, warmup_
             axes[j].axis('off')
 
         if c1 is not None and c2 is not None and c3 is not None and c4 is not None:
-            fig.legend([c1, c2, c3, c4], ['baseline', f'altered ({mode})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=4, frameon=False, fontsize=12)
+            if has_recovery:
+                fig.legend([c1, c2, c3, c4], ['baseline', f'byzantine ({mode})', 'failures', 'recovery'], loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=4, frameon=False, fontsize=12)
+            else:
+                fig.legend([c1, c2, c3], ['baseline', f'byzantine ({mode})', 'failures'], loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=3, frameon=False, fontsize=12)
         fig.suptitle(_make_setup_subtitle(mode, ordered[0] if ordered else 0, 1, n_nodes), fontsize=11, y=1.02, color='#555555', style='italic')
         plt.tight_layout(rect=(0, 0, 1, 0.95))
         out = os.path.join(search_dir, f'commit_progress_{mode}_f_all.png')

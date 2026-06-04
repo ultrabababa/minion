@@ -1,5 +1,5 @@
 name: "HotStuff Fault Injection Benchmark (N=${N})"
-description: "800-second benchmark for HotStuff with STABL fault injection (200 TPS total)"
+description: "800-second benchmark for HotStuff with STABL fault injection (10 TPS total)"
 secondaries: 5
 threads: 2
 bench:
@@ -21,5 +21,5 @@ workloads:
       behavior:
         - interaction: !transfer { from: *account, to: *account }
           load:
-            0: 40
-            800: 40
+            0: 2
+            800: 2

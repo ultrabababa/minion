@@ -56,7 +56,7 @@ while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 ; do
     sleep 5
 done
 
-sudo -n apt-get -o DPkg::Lock::Timeout=1200 install -yy 'psmisc' 'build-essential' 'direnv' 'git'
+sudo -n apt-get -o DPkg::Lock::Timeout=1200 install -yy 'psmisc' 'build-essential' 'direnv' 'git' 'curl'
 
 if [ ! -d "$HOME/.asdf" ]; then
     git clone https://github.com/asdf-vm/asdf.git "$HOME/.asdf" --branch v0.14.0

@@ -227,13 +227,64 @@ sub execute
 		exit (0);
 	    }
 
-	    if ($err =~ m|\n?kex_exchange_identification: Connection|) {
+	    if ($err =~ m|\n?kex_exchange_identification: Connection| ||
+		$err =~ m|\n?lost connection\n?| ||
+		$err =~ m|Connection reset by peer| ||
+		$err =~ m|Connection closed| ||
+		$err =~ m|Connection timed out| ||
+		$err =~ m|No route to host|) {
 		printf(STDERR "retry (%d remaining)\n", $retry);
+		sleep(1);
 		next;
 	    }
 
-	    if ($err =~ m|\n?lost connection\n?|) {
-		printf(STDERR "retry (%d remaining)\n", $retry);
+	    exit (1);
+	}
+
+	exit (1);
+	    }, %popts);
+}
+
+sub _scp_with_retry
+{
+    my ($self, $scpcmd, %popts) = @_;
+    my ($errout);
+
+    $errout = output_function($self->{__PACKAGE__()}->{_err});
+    confess() if (!defined($errout));
+
+    return Minion::System::Process->new(sub {
+	my ($retry, $ret, $err);
+
+	$retry = 5;
+
+	while ($retry > 0) {
+	    $err = '';
+
+	    $ret = Minion::System::Process->new(
+		[ @$scpcmd ],
+		STDERR => sub {
+		    return if (!defined($_[0]));
+		    $errout->($_[0]);
+		    $err .= $_[0];
+		    if (length($err) > 256) {
+			$err = substr($err, length($err) - 256);
+		    }
+		})->wait();
+
+	    $retry -= 1;
+
+	    if ($ret == 0) {
+		exit (0);
+	    }
+
+	    if ($err =~ m|\n?lost connection\n?| ||
+		$err =~ m|\n?kex_exchange_identification: Connection| ||
+		$err =~ m|Connection reset by peer| ||
+		$err =~ m|Connection closed| ||
+		$err =~ m|Connection timed out|) {
+		$errout->(sprintf("retry (%d remaining)\n", $retry));
+		sleep(1);
 		next;
 	    }
 
@@ -306,10 +357,7 @@ sub send
 
     $self->_log(join(' ', @scpcmd));
 
-    return Minion::System::Process->new(
-	\@scpcmd,
-	STDERR => $self->{__PACKAGE__()}->{_err}
-	);
+    return $self->_scp_with_retry(\@scpcmd, %popts);
 }
 
 sub recv
@@ -337,10 +385,7 @@ sub recv
 
     $self->_log(join(' ', @scpcmd));
 
-    return Minion::System::Process->new(
-	\@scpcmd,
-	STDERR => $self->{__PACKAGE__()}->{_err}
-	);
+    return $self->_scp_with_retry(\@scpcmd, %popts);
 }
 
 

@@ -44,7 +44,7 @@ _start_node() {
     #
     # 跑 silent-leader 实验：保持下面 BYZANTINE_NODES_FALLBACK="7,8,9"
     # 跑 baseline 实验：把下面这行改成 BYZANTINE_NODES_FALLBACK=""
-    local BYZANTINE_NODES_FALLBACK="7,8,9"
+    local BYZANTINE_NODES_FALLBACK=""
 
     local _byz=""
     if [ -n "${BYZANTINE_NODES:-}" ]; then

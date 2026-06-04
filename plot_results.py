@@ -10,7 +10,7 @@ import matplotlib as mpl
 import numpy as np
 
 BASELINE_COLOR = '#0F5298'  # dark blue
-ALTERED_COLOR = '#85C0F9'   # light blue
+ALTERED_COLOR = '#E76F51'   # high-contrast orange
 
 # Set academic paper style matching the STABL Middleware 2025 paper
 mpl.rcParams['font.family'] = 'serif'
@@ -20,6 +20,106 @@ mpl.rcParams['pdf.fonttype'] = 42
 DEFAULT_WARMUP_SKIP = 0.0
 DEFAULT_WINDOW_SIZE = 5.0
 DEFAULT_WINDOW_STEP = 1.0
+
+
+def _extract_workload_text(tar_path):
+    """Extract workload.yaml text from a results tarball."""
+    try:
+        with tarfile.open(tar_path, "r:gz") as tar:
+            for member in tar.getmembers():
+                if member.name.endswith("workload.yaml"):
+                    f = tar.extractfile(member)
+                    if f is not None:
+                        return f.read().decode("utf-8", errors="replace")
+    except Exception:
+        return None
+    return None
+
+
+def _infer_target_tps_from_workload_text(workload_text):
+    """Infer target TPS from workload YAML text.
+
+    For each workload entry, this computes:
+      contribution = number * max(load values)
+    and sums contributions across entries.
+    """
+    if not workload_text:
+        return None
+
+    lines = workload_text.splitlines()
+    i = 0
+    total_tps = 0
+    found = False
+
+    while i < len(lines):
+        m_num = re.match(r"^\s*-\s*number:\s*(\d+)\s*$", lines[i])
+        if not m_num:
+            i += 1
+            continue
+
+        number = int(m_num.group(1))
+        entry_indent = len(lines[i]) - len(lines[i].lstrip(" "))
+        load_values = []
+
+        j = i + 1
+        while j < len(lines):
+            line = lines[j]
+
+            m_next = re.match(r"^\s*-\s*number:\s*(\d+)\s*$", line)
+            indent = len(line) - len(line.lstrip(" "))
+            if m_next and indent <= entry_indent:
+                break
+
+            if re.match(r"^\s*load:\s*$", line):
+                load_indent = indent
+                k = j + 1
+                while k < len(lines):
+                    load_line = lines[k]
+                    if not load_line.strip():
+                        k += 1
+                        continue
+                    load_line_indent = len(load_line) - len(load_line.lstrip(" "))
+                    if load_line_indent <= load_indent:
+                        break
+                    m_load = re.match(r"^\s*\d+\s*:\s*(\d+)\s*$", load_line)
+                    if m_load:
+                        load_values.append(int(m_load.group(1)))
+                    k += 1
+                j = k - 1
+
+            j += 1
+
+        if load_values:
+            total_tps += number * max(load_values)
+            found = True
+
+        i = j
+
+    if found:
+        return total_tps
+
+    m_desc = re.search(r"(\d+)\s*TPS", workload_text, re.IGNORECASE)
+    if m_desc:
+        return int(m_desc.group(1))
+
+    return None
+
+
+def _resolve_target_tps(inferred_target_tps, override_target_tps=None):
+    if override_target_tps is not None:
+        return override_target_tps
+    return inferred_target_tps
+
+
+def _make_banner_text(n_nodes, f_max, target_tps):
+    parts = []
+    if n_nodes is not None:
+        parts.extend(["asonnino-hotstuff", f"N={n_nodes}", f"f_max={f_max}"])
+    if target_tps is not None:
+        parts.append(f"{target_tps} TPS target")
+    if not parts:
+        return None
+    return "  •  ".join(parts)
 
 
 def extract_and_parse(tar_path):
@@ -228,9 +328,9 @@ def plot_single_mode(ax, base_times, base_tps, alt_times, alt_tps,
     # baseline: dark blue
     line_base, = ax.plot(base_times, base_tps, color=BASELINE_COLOR, linewidth=0.9,
                          alpha=0.9, label='baseline', zorder=2)
-    # altered: orange
+    # fault-injected: byzantine
     line_alt, = ax.plot(alt_times, alt_tps, color=ALTERED_COLOR, linewidth=0.9,
-                        alpha=0.95, label='altered', zorder=3)
+                        alpha=0.95, label='byzantine', zorder=3)
 
     # Fault/recovery times from STABL formula
     fault_at = duration / 6.0
@@ -239,14 +339,14 @@ def plot_single_mode(ax, base_times, base_tps, alt_times, alt_tps,
     recovery_x = recovery_at - warmup_skip
 
     line_fail = ax.axvline(x=fail_x, color='#D62728', linestyle='--', linewidth=1.2,
-                           label=f'failures (t={int(fault_at)}s)')
+                           label=f'fault injection time (t={int(fault_at)}s)')
 
     if has_recovery:
         line_rec = ax.axvline(x=recovery_x, color='#D62728', linestyle=':', linewidth=1.2,
-                              label=f'recovery (t={int(recovery_at)}s)')
+                              label=f'recovery time (t={int(recovery_at)}s)')
     else:
         line_rec = ax.axvline(x=recovery_x, color='#D62728', linestyle=':', linewidth=1.0,
-                              label='recovery', alpha=0)
+                              label='recovery time', alpha=0)
 
     ax.set_title(title, fontsize=13, pad=8)
     _format_axes(ax, duration, warmup_skip, log_y=log_y)
@@ -262,6 +362,7 @@ def plot_stabl_paper_style(
     warmup_skip=DEFAULT_WARMUP_SKIP,
     log_y=True,
     n_nodes=None,
+    target_tps_override=None,
 ):
     """Generate per-mode and combined throughput plots.
     mode_files: dict of mode -> (path, failures)
@@ -298,8 +399,12 @@ def plot_stabl_paper_style(
     # Compute BFT fault tolerance bound: f_max = floor((N-1)/3)
     f_max = (n_nodes - 1) // 3 if n_nodes else None
 
+    workload_text = _extract_workload_text(base_path)
+    inferred_target_tps = _infer_target_tps_from_workload_text(workload_text)
+    target_tps = _resolve_target_tps(inferred_target_tps, target_tps_override)
+
     # Build global info banner text
-    banner = f"asonnino-hotstuff  \u2022  N={n_nodes}  \u2022  f_max={f_max}  \u2022  100 TPS target" if n_nodes else None
+    banner = _make_banner_text(n_nodes, f_max, target_tps)
 
     def _add_banner(fig):
         if banner:
@@ -370,8 +475,14 @@ def plot_stabl_paper_style(
             log_y=log_y,
         )
 
-        legend_labels = ['baseline', 'altered', 'failures', 'recovery']
-        fig.legend(handles, legend_labels, loc='upper center',
+        if rec:
+            legend_handles = handles
+            legend_labels = ['baseline', 'byzantine', 'fault injection time', 'recovery time']
+        else:
+            legend_handles = handles[:3]
+            legend_labels = ['baseline', 'byzantine', 'fault injection time']
+
+        fig.legend(legend_handles, legend_labels, loc='upper center',
                    bbox_to_anchor=(0.5, 1.05), ncol=4,
                    frameon=False, fontsize=11, handlelength=2.2)
 
@@ -414,7 +525,7 @@ def plot_stabl_paper_style(
             log_y=log_y,
         )
 
-    legend_labels = ['baseline', 'altered', 'failures', 'recovery']
+    legend_labels = ['baseline', 'byzantine', 'fault injection time', 'recovery time']
     fig.legend(last_handles, legend_labels, loc='upper center',
                bbox_to_anchor=(0.5, 1.12), ncol=4,
                frameon=False, fontsize=11, handlelength=2.2)
@@ -449,7 +560,7 @@ def plot_stabl_paper_style(
         )
 
         line_base_p, = ax.plot(base_prog_t, base_prog, color=BASELINE_COLOR, linewidth=1.0, alpha=0.9, label='baseline')
-        line_alt_p, = ax.plot(alt_prog_t, alt_prog, color=ALTERED_COLOR, linewidth=1.0, alpha=0.95, label='altered')
+        line_alt_p, = ax.plot(alt_prog_t, alt_prog, color=ALTERED_COLOR, linewidth=1.0, alpha=0.95, label='byzantine')
 
         fault_at = duration / 6.0
         recovery_at = duration / 3.0
@@ -478,7 +589,7 @@ def plot_stabl_paper_style(
         ax.set_xlabel('Time (s)', fontsize=12)
 
     if prog_handles:
-        fig.legend(prog_handles, ['baseline', 'altered', 'failures', 'recovery'],
+        fig.legend(prog_handles, ['baseline', 'byzantine', 'fault injection time', 'recovery time'],
                    loc='upper center', bbox_to_anchor=(0.5, 1.12),
                    ncol=4, frameon=False, fontsize=12, handlelength=2.5)
 
@@ -500,6 +611,7 @@ def plot_byzantine_comparison(
     warmup_skip=DEFAULT_WARMUP_SKIP,
     log_y=True,
     n_nodes=None,
+    target_tps_override=None,
 ):
     """
     Plot Byzantine Node Tolerance comparison: standard client vs secure client (redundancy=4).
@@ -557,7 +669,10 @@ def plot_byzantine_comparison(
                          alpha=0.85, label=f'secure client (redundancy={redundancy})', zorder=3)
 
     f_max = (n_nodes - 1) // 3 if n_nodes else None
-    banner = f"asonnino-hotstuff  \u2022  N={n_nodes}  \u2022  f_max={f_max}  \u2022  100 TPS target" if n_nodes else None
+    workload_text = _extract_workload_text(base_path)
+    inferred_target_tps = _infer_target_tps_from_workload_text(workload_text)
+    target_tps = _resolve_target_tps(inferred_target_tps, target_tps_override)
+    banner = _make_banner_text(n_nodes, f_max, target_tps)
     if banner:
         fig.text(0.5, 0.97, banner, ha='center', va='top', fontsize=9,
                  color='#666666', style='italic', transform=fig.transFigure)
@@ -703,6 +818,8 @@ if __name__ == "__main__":
                         help="Skip this many seconds from first submit timestamp (default: 0)")
     parser.add_argument("--linear-y", action="store_true",
                         help="Use linear Y axis (default is log-scale Y)")
+    parser.add_argument("--target-tps", type=int, default=None,
+                        help="Override TPS target shown in banner; default auto-detect from workload.yaml")
     parser.add_argument("--final-suite", action="store_true",
                         help="Require/select final test suite for one family (hotstuff* or asonnino-hotstuff*): none f0, crash-no-recovery f3, crash f4, partition f4, and *-redundant none f0 r4")
     args = parser.parse_args()
@@ -796,6 +913,7 @@ if __name__ == "__main__":
             warmup_skip=args.warmup_skip,
             log_y=log_y,
             n_nodes=n_nodes,
+            target_tps_override=args.target_tps,
         )
     if redundant_mode_files and 'none' in mode_files:
         plot_byzantine_comparison(
@@ -807,4 +925,5 @@ if __name__ == "__main__":
             warmup_skip=args.warmup_skip,
             log_y=log_y,
             n_nodes=n_nodes,
+            target_tps_override=args.target_tps,
         )

@@ -1,5 +1,5 @@
-name: "HotStuff Fault Injection Benchmark (N=${N})"
-description: "800-second benchmark for HotStuff with STABL fault injection (80 TPS total)"
+name: "HotStuff N31 crash-no-recovery-9 80 TPS"
+description: "800-second N31 benchmark at 80 TPS; client mempool view excludes the 9 permanently crashed nodes"
 secondaries: 5
 threads: 2
 bench:
@@ -9,7 +9,7 @@ bench:
     800: 5
 let:
   - &live_mempool_nodes
-    sample: !endpoint [ "10\\.30\\.10\\.([1-9]|1[0-9]|20)$" ]
+    sample: !endpoint [ "10\\.30\\.10\\.([1-9]|1[0-9]|2[0-2])$" ]
   - !loop &all_clients
     sample: !location [ ".*" ]
   - &account { sample: !account { number: 4, stake: 100 } }

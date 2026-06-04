@@ -65,11 +65,17 @@ setup_environment() {
 	export TRACE="true"
 }
 
+is_diablo_pid_alive() {
+    local pid="$1"
+    ps -p "${pid}" -o args= 2> '/dev/null' | grep -q '[d]iablo'
+}
+
 
 # Primary node  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 start_primary() {
     local dir pid port nsecondary nobserver
+    local observer_args
 
     dir="${deploy_root}/primary"
 
@@ -83,6 +89,11 @@ start_primary() {
 
     if ! echo "${port}" | grep -Pq '^\d+$' ; then
 	fatal "cannot start diablo primary with port '${port}'"
+    fi
+
+    observer_args=()
+    if [ "${nobserver}" -gt 0 ] ; then
+	observer_args=(--observers "${nobserver}")
     fi
 
     # diablo primary \
@@ -103,7 +114,7 @@ start_primary() {
 	   --port=${port} \
 	   --output="${dir}/results.json" \
 	   --compress --stat \
-	   --observers ${nobserver} \
+	   "${observer_args[@]}" \
 	   ${nsecondary} "${dir}/setup.yaml" "${deploy_root}/workload.yaml" \
 	   > "${dir}/out" 2> "${dir}/err" &
     pid=$!
@@ -142,7 +153,7 @@ stop_primary() {
     echo "--"
     cat "${dir}/out"
     echo "--"
-    cat "${sir}/err"
+    cat "${dir}/err"
 }
 
 wait_primary() {
@@ -162,7 +173,7 @@ wait_primary() {
 	fatal "cannot wait diablo primary with pid '${pid}'"
     fi
 
-    while ps aux | grep "${pid}" | grep 'diablo' > '/dev/null' ; do
+    while is_diablo_pid_alive "${pid}" ; do
 	sleep 10
     done
 
@@ -250,7 +261,7 @@ wait_secondary() {
     for dir in "${deploy_root}/secondary"* ; do
 	if [ ! -d "${dir}" ] ; then
 	    continue
-	elif [ ! -e "${sir}/pid" ] ; then
+	elif [ ! -e "${dir}/pid" ] ; then
 	    continue
 	fi
 
@@ -260,7 +271,7 @@ wait_secondary() {
 	    fatal "cannot wait diablo secondary with pid '${pid}'"
 	fi
 
-	while ps aux | grep -q "${pid}" | grep 'diablo' > '/dev/null' ; do
+	while is_diablo_pid_alive "${pid}" ; do
 	    sleep 10
 	done
 

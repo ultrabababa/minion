@@ -1,12 +1,12 @@
 name: "HotStuff Quick Verification (N=${N})"
-description: "60-second benchmark for fast verification (100 TPS total)."
+description: "30-second benchmark for fast verification (40 TPS total)."
 secondaries: 5
 threads: 2
 bench:
   type: "simple"
   txs:
     0: 5
-    60: 5
+    30: 5
 let:
   - &all_nodes
     sample: !endpoint [ ".*" ]
@@ -21,5 +21,5 @@ workloads:
       behavior:
         - interaction: !transfer { from: *account, to: *account }
           load:
-            0: 20
-            60: 20
+            0: 8
+            30: 8

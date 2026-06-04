@@ -18,10 +18,7 @@ if (!defined($action)) {
 }
 
 
-# Start the Diablo primary node first and when confirmation that it is running,
-# then start the diablo secondaries.
-#
-sub start_nodes
+sub start_primary
 {
     my ($proc);
 
@@ -30,11 +27,29 @@ sub start_nodes
 	die ("cannot start diablo primary node");
     }
 
+    return 1;
+}
+
+sub start_secondaries
+{
+    my ($proc);
+
     $proc = $RUNNER->run($FLEET, [ 'diablo-worker', 'secondary', 'start' ]);
     if ($proc->wait() != 0) {
 	$RUNNER->run($FLEET, [ 'diablo-worker', 'primary', 'stop' ])->wait();
-	die ("cannot start diablo primary node");
+	die ("cannot start diablo secondary nodes");
     }
+
+    return 1;
+}
+
+# Start the Diablo primary node first and when confirmation that it is running,
+# then start the diablo secondaries.
+#
+sub start_nodes
+{
+    start_primary();
+    start_secondaries();
 
     return 1;
 }
@@ -70,6 +85,10 @@ sub wait_nodes
 
 if ($action eq 'start') {
     start_nodes();
+} elsif ($action eq 'start-primary') {
+    start_primary();
+} elsif ($action eq 'start-secondaries') {
+    start_secondaries();
 } elsif ($action eq 'stop') {
     stop_nodes();
 } elsif ($action eq 'wait') {

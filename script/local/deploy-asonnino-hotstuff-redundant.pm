@@ -10,6 +10,18 @@ my $RUNNER = $PARAMS{RUNNER};
 
 my ($action, $redundancy, @err) = @ARGV;
 $redundancy //= 1;
+my $DEFAULT_CLIENT_INFLIGHT = 4096;
+
+sub client_inflight {
+    my $value = $ENV{ASONNINO_HOTSTUFF_CLIENT_INFLIGHT};
+    if (!defined($value) || $value eq '') {
+        return $DEFAULT_CLIENT_INFLIGHT;
+    }
+    if ($value !~ /^\d+$/ || $value <= 0) {
+        die ("invalid ASONNINO_HOTSTUFF_CLIENT_INFLIGHT '$value'");
+    }
+    return int($value);
+}
 
 sub deploy_asonnino_hotstuff_redundant {
     my @ips = ();
@@ -49,8 +61,8 @@ sub deploy_asonnino_hotstuff_redundant {
 
     print $fh "interface: \"asonnino-hotstuff-redundant\"\n\n";
     print $fh "parameters:\n";
-    printf $fh "  redundancy: %d\n\n", $redundancy;
-    print $fh "  client_inflight: 512\n\n";
+    printf $fh "  redundancy: %d\n", $redundancy;
+    printf $fh "  client_inflight: %d\n\n", client_inflight();
     print $fh "endpoints:\n\n";
     print $fh "  - addresses:\n";
     foreach my $ip (@ips) {

@@ -5,6 +5,14 @@ set -e
 script_name='diablo-observer'
 deploy_root="${HOME}/deploy/diablo-observer"
 
+fatal() {
+	local msg="$1" ; shift
+
+	exec >&2
+
+	echo "${script_name}: ${msg}"
+	exit 1
+}
 
 # setup_environment() {
 #     if [ ! -e "${install_root}" ] ; then
@@ -22,7 +30,7 @@ deploy_root="${HOME}/deploy/diablo-observer"
 # Actions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 start() {
-	local dir pid config addr ip port blockchain script
+	local dir pid config addr ip port blockchain script started connected
 
 	if [ $# -gt 0 ] ; then
 	fatal "unexpected operand '$1'"
@@ -38,25 +46,49 @@ start() {
 	port="$(echo "${addr}" | cut -d':' -f2)"
     blockchain="$(cat "${dir}/blockchain")"
     failures="$(cat "${dir}/failures")"
-    mode="$(cat "${dir}/mode")"
-    nodenum="$(cat "${dir}/nodenum")"
+	mode="$(cat "${dir}/mode")"
+	nodenum="$(cat "${dir}/nodenum")"
 	script="${dir}/${blockchain}"
+	started=0
+	: > "${dir}/out"
+	: > "${dir}/err"
 
-	for attempt in {1..60}
+	for attempt in {1..5}
 	do
-		python3 "${deploy_root}/observer.py" "${ip}" "${port}" "${script}" "${failures}" "133" "${mode}" "${nodenum}" >> "${dir}/out" 2>> "${dir}/err" &
+		python3 -u "${deploy_root}/observer.py" "${ip}" "${port}" "${script}" "${failures}" "133" "${mode}" "${nodenum}" >> "${dir}/out" 2>> "${dir}/err" &
 		pid=$!
+		connected=0
 
-		sleep 2
+		for check in {1..30}
+		do
+			sleep 1
+			if grep -q '^connected$' "${dir}/out" 2> '/dev/null'; then
+				connected=1
+				break
+			fi
+			if [[ -z $pid ]] || ! kill -0 "$pid" 2> '/dev/null'; then
+				break
+			fi
+		done
 
-		if [[ -z $pid ]] || ! kill -0 "$pid"; then
-			echo "############## observer exited, restarting ##############"
-			continue
-		else
+		if [ ${connected} -eq 1 ]; then
 			echo ${pid} > "${dir}/pid"
+			started=1
 			break
 		fi
+
+		if [[ -n $pid ]] && kill -0 "$pid" 2> '/dev/null'; then
+			kill "$pid" 2> '/dev/null' || true
+		fi
+		echo "############## observer not connected, restarting ##############"
+		tail -20 "${dir}/err" >&2 || true
 	done
+
+	if [ ${started} -eq 0 ] ; then
+		echo "############## observer failed to start ##############" >&2
+		tail -80 "${dir}/err" >&2 || true
+		fatal "observer failed to start after retries"
+	fi
 
     sleep 10
 }

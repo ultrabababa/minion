@@ -9,6 +9,30 @@ my $RUNNER = $PARAMS{RUNNER};
 
 my ($action, $redundancy, @err) = @ARGV;
 $redundancy //= 1;
+my $DEFAULT_CLIENT_INFLIGHT = 4096;
+my $DEFAULT_CLIENT_MEMPOOL_MODE = 'round_robin';
+
+sub client_inflight {
+    my $value = $ENV{ASONNINO_HOTSTUFF_CLIENT_INFLIGHT};
+    if (!defined($value) || $value eq '') {
+        return $DEFAULT_CLIENT_INFLIGHT;
+    }
+    if ($value !~ /^\d+$/ || $value <= 0) {
+        die ("invalid ASONNINO_HOTSTUFF_CLIENT_INFLIGHT '$value'");
+    }
+    return int($value);
+}
+
+sub client_mempool_mode {
+    my $value = $ENV{ASONNINO_HOTSTUFF_CLIENT_MEMPOOL_MODE};
+    if (!defined($value) || $value eq '') {
+        return $DEFAULT_CLIENT_MEMPOOL_MODE;
+    }
+    if ($value ne 'round_robin' && $value ne 'single') {
+        die ("invalid ASONNINO_HOTSTUFF_CLIENT_MEMPOOL_MODE '$value'");
+    }
+    return $value;
+}
 
 sub deploy_asonnino_hotstuff {
     my @hotstuff_ips = ();
@@ -53,7 +77,8 @@ sub deploy_asonnino_hotstuff {
 
 print $fh "interface: \"asonnino-hotstuff\"\n\n";
 print $fh "parameters:\n";
-print $fh "  client_inflight: 512\n\n";
+printf $fh "  client_inflight: %d\n", client_inflight();
+printf $fh "  client_mempool_mode: %s\n\n", client_mempool_mode();
 print $fh "endpoints:\n\n";
     print $fh "  - addresses:\n";
     foreach my $ip (@hotstuff_ips) {

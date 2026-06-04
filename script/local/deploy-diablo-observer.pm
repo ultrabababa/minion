@@ -16,7 +16,8 @@ use deploy_common qw ( get_nodes );
 use deploy_diablo qw ( get_nodes );
 
 
-my $PRIMARY_TCP_PORT = 5002;
+my $PRIMARY_TCP_PORT = 5001;
+my $OBSERVER_TCP_PORT = $PRIMARY_TCP_PORT + 1;
 
 
 my $FLEET = $_;						# Global parameter (setup by the Runner)
@@ -71,7 +72,7 @@ sub deploy_diablo_observer
 	}
     }
 
-	my $proc = $RUNNER->run(\@workers, [ 'deploy-diablo-observer-worker', $primary . ':' . $PRIMARY_TCP_PORT, $blockchain, $failures, $mode, $nodenum ]);
+	my $proc = $RUNNER->run(\@workers, [ 'deploy-diablo-observer-worker', $primary . ':' . $OBSERVER_TCP_PORT, $blockchain, $failures, $mode, $nodenum ]);
 	if ($proc->wait() != 0) {
 	die ("failed to deploy diablo observers");
 	}

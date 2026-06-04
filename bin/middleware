@@ -82,6 +82,7 @@ sub benchmark_blockchain
     my ($blockchain, $workload, $primary, $secondaries, $chain, $result, $failures, $mode, $redundancy) = @_;
     my ($runner, $worker, $all, $diablo, $path, $instance, $proc, $pgrp, $wd);
     my ($dir, $base, $full, $compress, $fh);
+    my ($need_fault_observer, $diablo_wait_timeout, $diablo_wait_status);
 
 	if ($result =~ m!^(.*/)?([^/]+)(\.(?:tar\.|t)(?:gz|xz|bzip2))$!) {
 	($dir, $base, $compress) = ($1, $2, $3);
@@ -127,12 +128,15 @@ sub benchmark_blockchain
 
     $all = [ values(%$all) ];
     $diablo = [ values(%$diablo) ];
+    $need_fault_observer = (($mode ne 'none') && ($failures > 0));
 
-	$runner->run($diablo, [ 'diablo', 'stop' ])->wait();
+		$runner->run($diablo, [ 'diablo', 'stop' ])->wait();
 
-    $runner->run($chain, [ $blockchain, 'stop' ])->wait();
+	    $runner->run($chain, [ $blockchain, 'stop' ])->wait();
 
-	$runner->run($chain, [ 'diablo-observer', 'stop' ])->wait();
+		if ($need_fault_observer) {
+	    $runner->run($chain, [ 'diablo-observer', 'stop' ])->wait();
+	}
 
 	# printf("breakpoint: stopped\n");
 	# printf("press ENTER to continue or Ctrl-C to stop");
@@ -153,15 +157,17 @@ sub benchmark_blockchain
 	fatal("failed to register blockchain nodes");
     }
 
-	if ($runner->run($chain, [ 'behave-diablo-observer' ])->wait() != 0) {
-	fatal("failed to register diablo observers");
-    }
+	if ($need_fault_observer &&
+	    $runner->run($chain, [ 'behave-diablo-observer' ])->wait() != 0) {
+		fatal("failed to register diablo observers");
+	    }
 
     if ($runner->run($all, [ 'deploy', $redundancy ])->wait() != 0) {
 	fatal("failed to deploy");
     }
 
-	if ($runner->run($all, [ 'deploy-diablo-observer', $blockchain, $failures, $mode ])->wait() != 0) {
+	if ($need_fault_observer &&
+	    $runner->run($all, [ 'deploy-diablo-observer', $blockchain, $failures, $mode ])->wait() != 0) {
     die ("failed to deploy diablo observers");
 }
 
@@ -174,17 +180,44 @@ sub benchmark_blockchain
 	fatal("failed to start blockchain");
     }
 
-    if ($runner->run($diablo, [ 'diablo', 'start' ])->wait() != 0) {
-	fatal("failed to start diablo");
+	if ($need_fault_observer) {
+	    if ($runner->run($diablo, [ 'diablo', 'start-primary' ])->wait() != 0) {
+		fatal("failed to start diablo primary");
+	    }
+
+	    if ($runner->run($diablo, [ 'diablo', 'start-secondaries' ])->wait() != 0) {
+		fatal("failed to start diablo secondaries");
+	    }
+
+	    if ($runner->run($chain, [ 'diablo-observer', 'start' ])->wait() != 0) {
+		fatal("failed to start diablo observers");
+	    }
+	} elsif ($runner->run($diablo, [ 'diablo', 'start' ])->wait() != 0) {
+	    fatal("failed to start diablo");
+	}
+
+    $diablo_wait_timeout = $ENV{MINION_DIABLO_WAIT_TIMEOUT_SEC} // 900;
+    eval {
+	local $SIG{ALRM} = sub { die "__DIABLO_WAIT_TIMEOUT__\n"; };
+	alarm($diablo_wait_timeout);
+	$diablo_wait_status = $runner->run($diablo, [ 'diablo', 'wait' ])->wait();
+	alarm(0);
+    };
+    if ($@) {
+	alarm(0);
+	if ($@ =~ /__DIABLO_WAIT_TIMEOUT__/) {
+	    printf(STDERR "diablo wait timed out after %s seconds\n", $diablo_wait_timeout);
+	    if ($runner->run($diablo, [ 'diablo', 'stop' ])->wait() != 0) {
+		fatal("failed to stop diablo after wait timeout");
+	    }
+	    fatal("diablo wait timed out");
+	}
+	die $@;
     }
 
-	if ($runner->run($chain, [ 'diablo-observer', 'start' ])->wait() != 0) {
-	fatal("failed to start diablo observers");
-    }
-
-    if ($runner->run($diablo, [ 'diablo', 'wait' ])->wait() != 0) {
-	fatal("failed to wait diablo");
-    }
+    if ($diablo_wait_status != 0) {
+		fatal("failed to wait diablo");
+	    }
 
     # printf("breakpoint: blockchain started\n");
 	# printf("press ENTER to continue or Ctrl-C to stop");
@@ -195,9 +228,10 @@ sub benchmark_blockchain
 	fatal("failed to stop blockchain");
     }
 
-	if ($runner->run($chain, [ 'diablo-observer', 'stop' ])->wait() != 0) {
-	fatal("failed to stop diablo observers");
-    }
+	if ($need_fault_observer &&
+	    $runner->run($chain, [ 'diablo-observer', 'stop' ])->wait() != 0) {
+		fatal("failed to stop diablo observers");
+	    }
 
 	# if (0) {
 
@@ -311,19 +345,21 @@ sub benchmark_blockchain
 	    );
 		$pgrp->add($proc);
 
-		$proc = $instance->recv(
-		    [ 'deploy/diablo-observer/out' ],
-		    TARGET => $full . '/observer-' . $instance->id() .
-		              '-out.log'
-		    );
-		$pgrp->add($proc);
+		if ($need_fault_observer) {
+		    $proc = $instance->recv(
+			[ 'deploy/diablo-observer/out' ],
+			TARGET => $full . '/observer-' . $instance->id() .
+				  '-out.log'
+			);
+		    $pgrp->add($proc);
 
-		$proc = $instance->recv(
-		    [ 'deploy/diablo-observer/err' ],
-		    TARGET => $full . '/observer-' . $instance->id() .
-		              '-err.log'
-		    );
-		$pgrp->add($proc);
+		    $proc = $instance->recv(
+			[ 'deploy/diablo-observer/err' ],
+			TARGET => $full . '/observer-' . $instance->id() .
+				  '-err.log'
+			);
+		    $pgrp->add($proc);
+		}
 
 	if ($chain_log_dir =~ /algorand/) {
 		$proc = $instance->recv(
